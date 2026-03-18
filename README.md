@@ -65,6 +65,21 @@ Notes:
 BACKEND_PORT=8080 FRONTEND_PORT=5500 ./stop.sh
 ```
 
+### FRED diagnostics (if risk-free rate falls back)
+
+Run:
+
+```bash
+./fred_diagnose.sh
+```
+
+Optional: set `FRED_API_KEY` to use the official FRED API endpoint:
+
+```bash
+export FRED_API_KEY=your_key_here
+./start.sh
+```
+
 ## Notes and assumptions
 
 - Mutual funds are hardcoded and exposed through `/api/funds`.
