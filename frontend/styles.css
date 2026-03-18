@@ -1,0 +1,108 @@
+:root {
+  --bg: #f5f6f2;
+  --panel: #ffffff;
+  --text: #1f2a2e;
+  --muted: #5f6f75;
+  --accent: #0d6a77;
+  --accent-hover: #0a5560;
+  --border: #d4dde0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 20% 10%, #e6f3f5 0%, var(--bg) 45%);
+  color: var(--text);
+}
+
+.layout {
+  max-width: 900px;
+  margin: 32px auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 10px 24px rgba(31, 42, 46, 0.08);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.form {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 1rem;
+}
+
+button {
+  margin-top: 6px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+.result .big {
+  font-size: 2.2rem;
+  margin: 6px 0 14px;
+  color: var(--accent);
+}
+
+.metrics p {
+  margin: 6px 0;
+}
+
+.error {
+  border-color: #f2b4b4;
+  background: #fff6f6;
+  color: #8d2323;
+}
+
+@media (max-width: 680px) {
+  .layout {
+    margin: 16px auto;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .result .big {
+    font-size: 1.8rem;
+  }
+}

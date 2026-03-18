@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mutual Fund Calculator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <h1>Mutual Fund Calculator</h1>
+      <p class="subtitle">Estimate future value using CAPM and last-year mutual fund performance.</p>
+
+      <form id="calc-form" class="form">
+        <label for="fund-select">Mutual fund</label>
+        <select id="fund-select" required></select>
+
+        <label for="principal">Initial investment ($)</label>
+        <input id="principal" type="number" min="1" step="0.01" placeholder="10000" required />
+
+        <label for="years">Time horizon (years)</label>
+        <input id="years" type="number" min="0.1" step="0.1" placeholder="5" required />
+
+        <button type="submit">Calculate Future Value</button>
+      </form>
+    </section>
+
+    <section class="panel result" id="result-panel" hidden>
+      <h2>Projection</h2>
+      <p class="big" id="future-value">$0.00</p>
+      <div class="metrics">
+        <p><strong>Ticker:</strong> <span id="m-ticker">-</span></p>
+        <p><strong>Risk-free rate:</strong> <span id="m-risk-free">-</span></p>
+        <p><strong>Beta:</strong> <span id="m-beta">-</span></p>
+        <p><strong>Expected return:</strong> <span id="m-expected">-</span></p>
+        <p><strong>CAPM rate:</strong> <span id="m-capm">-</span></p>
+      </div>
+    </section>
+
+    <section class="panel error" id="error-panel" hidden></section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
