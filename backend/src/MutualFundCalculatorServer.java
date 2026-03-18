@@ -31,11 +31,24 @@ public class MutualFundCalculatorServer {
 
     static {
         List<Fund> funds = new ArrayList<Fund>();
+        funds.add(new Fund("VSMPX", "Vanguard Total Stock Market Index Fund Institutional Plus"));
+        funds.add(new Fund("FXAIX", "Fidelity 500 Index Fund"));
         funds.add(new Fund("VFIAX", "Vanguard 500 Index Fund Admiral Shares"));
         funds.add(new Fund("VTSAX", "Vanguard Total Stock Market Index Fund Admiral Shares"));
-        funds.add(new Fund("FXAIX", "Fidelity 500 Index Fund"));
-        funds.add(new Fund("SWPPX", "Schwab S&P 500 Index Fund"));
-        funds.add(new Fund("VIGAX", "Vanguard Growth Index Fund Admiral Shares"));
+        funds.add(new Fund("VMFXX", "Vanguard Federal Money Market Fund Investor"));
+        funds.add(new Fund("VGTSX", "Vanguard Total International Stock Index Fund Investor"));
+        funds.add(new Fund("SWVXX", "Schwab Value Advantage Money Fund Investor"));
+        funds.add(new Fund("FGTXX", "Goldman Sachs FS Government Fund Institutional"));
+        funds.add(new Fund("FCTDX", "Fidelity Strategic Advisers Fidelity U.S. Total Stock Fund"));
+        funds.add(new Fund("VIIIX", "Vanguard Institutional Index Fund Institutional Plus"));
+        funds.add(new Fund("VTBNX", "Vanguard Total Bond Market II Index Fund Institutional"));
+        funds.add(new Fund("MVRXX", "Morgan Stanley Institutional Liquidity Government Portfolio Institutional"));
+        funds.add(new Fund("GVMXX", "State Street U.S. Government Money Market Fund Premier"));
+        funds.add(new Fund("AGTHX", "American Funds Growth Fund of America A"));
+        funds.add(new Fund("VTBIX", "Vanguard Total Bond Market II Index Fund Investor"));
+        funds.add(new Fund("FCNTX", "Fidelity Contrafund"));
+        funds.add(new Fund("SNAXX", "Schwab Value Advantage Money Fund Ultra"));
+        funds.add(new Fund("PIMIX", "PIMCO Income Fund Institutional"));
         FUNDS = Collections.unmodifiableList(funds);
     }
 
