@@ -25,7 +25,6 @@ import java.util.regex.Pattern;
 
 public class MutualFundCalculatorServer {
     private static final int PORT = 8080;
-    private static final double RISK_FREE_RATE = 0.043; // 4.30%
 
     private static final List<Fund> FUNDS;
 
@@ -125,9 +124,10 @@ public class MutualFundCalculatorServer {
             }
 
             try {
+                double riskFreeRate = fetchRiskFreeRateFromFred();
                 double beta = fetchBetaFromNewton(ticker);
-                double expectedReturnRate = fetchExpectedAnnualReturnFromYahoo(ticker);
-                double capmRate = RISK_FREE_RATE + beta * (expectedReturnRate - RISK_FREE_RATE);
+                double expectedReturnRate = fetchExpectedAnnualMarketReturnFromYahooSp500();
+                double capmRate = riskFreeRate + beta * (expectedReturnRate - riskFreeRate);
                 double futureValue = principal * Math.pow(1.0 + capmRate, years);
 
                 StringBuilder body = new StringBuilder();
@@ -135,7 +135,7 @@ public class MutualFundCalculatorServer {
                     .append("\"ticker\":\"").append(escapeJson(ticker)).append("\",")
                     .append("\"principal\":").append(round(principal, 2)).append(',')
                     .append("\"years\":").append(round(years, 2)).append(',')
-                    .append("\"riskFreeRate\":").append(round(RISK_FREE_RATE, 6)).append(',')
+                    .append("\"riskFreeRate\":").append(round(riskFreeRate, 6)).append(',')
                     .append("\"beta\":").append(round(beta, 6)).append(',')
                     .append("\"expectedReturnRate\":").append(round(expectedReturnRate, 6)).append(',')
                     .append("\"capmRate\":").append(round(capmRate, 6)).append(',')
@@ -193,28 +193,74 @@ public class MutualFundCalculatorServer {
         }
     }
 
-    private static double fetchExpectedAnnualReturnFromYahoo(String ticker) throws ExternalDataException {
+    private static double fetchRiskFreeRateFromFred() throws ExternalDataException {
         try {
-            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/" +
-                URLEncoder.encode(ticker, "UTF-8") +
-                "?range=1y&interval=1mo&events=history";
+            String endpoint = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10";
+            String response = httpGet(endpoint, 10000, 10000);
+            return extractLatestFredRate(response);
+        } catch (IOException e) {
+            throw new ExternalDataException("FRED connection failed", e);
+        }
+    }
+
+    private static double fetchExpectedAnnualMarketReturnFromYahooSp500() throws ExternalDataException {
+        try {
+            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1mo&events=history";
             String response = httpGet(endpoint, 10000, 10000);
 
-            // Use first and last valid monthly close to approximate last-year performance.
+            // Calculate average annualized return from 5 years of monthly S&P 500 closes.
             List<Double> closes = extractCloseValues(response);
             if (closes.size() < 2) {
                 throw new ExternalDataException("Insufficient close-price data from Yahoo Finance", null);
             }
 
-            double first = closes.get(0);
-            double last = closes.get(closes.size() - 1);
-            if (first <= 0) {
-                throw new ExternalDataException("Invalid first close value from Yahoo Finance", null);
+            double compoundedGrowth = 1.0;
+            int periods = 0;
+            for (int i = 1; i < closes.size(); i++) {
+                double previous = closes.get(i - 1);
+                double current = closes.get(i);
+                if (previous <= 0 || current <= 0) {
+                    continue;
+                }
+                compoundedGrowth *= (current / previous);
+                periods++;
             }
-            return (last - first) / first;
+            if (periods == 0) {
+                throw new ExternalDataException("No valid return periods in Yahoo Finance data", null);
+            }
+
+            return Math.pow(compoundedGrowth, 12.0 / periods) - 1.0;
         } catch (IOException e) {
             throw new ExternalDataException("Yahoo Finance connection failed", e);
         }
+    }
+
+    private static double extractLatestFredRate(String csv) throws ExternalDataException {
+        String[] lines = csv.split("\\r?\\n");
+        for (int i = lines.length - 1; i >= 1; i--) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            String[] columns = line.split(",", 2);
+            if (columns.length < 2) {
+                continue;
+            }
+
+            String value = columns[1].trim();
+            if (value.isEmpty() || ".".equals(value)) {
+                continue;
+            }
+
+            try {
+                return Double.parseDouble(value) / 100.0;
+            } catch (NumberFormatException ignored) {
+                // Keep scanning for a valid numeric row.
+            }
+        }
+
+        throw new ExternalDataException("No valid DGS10 value found in FRED response", null);
     }
 
     private static String httpGet(String endpoint, int connectTimeoutMs, int readTimeoutMs) throws IOException, ExternalDataException {
