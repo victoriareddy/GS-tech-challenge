@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 
 public class MutualFundCalculatorServer {
     private static final int PORT = 8080;
+    private static final double DEFAULT_RISK_FREE_RATE = 0.043; // Fallback if FRED is unavailable.
 
     private static final List<Fund> FUNDS;
 
@@ -194,13 +195,24 @@ public class MutualFundCalculatorServer {
     }
 
     private static double fetchRiskFreeRateFromFred() throws ExternalDataException {
-        try {
-            String endpoint = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10";
-            String response = httpGet(endpoint, 10000, 10000);
-            return extractLatestFredRate(response);
-        } catch (IOException e) {
-            throw new ExternalDataException("FRED connection failed", e);
+        String[] endpoints = new String[] {
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+            "https://fred.stlouisfed.org/series/DGS10/downloaddata/DGS10.csv"
+        };
+
+        for (String endpoint : endpoints) {
+            try {
+                String response = httpGet(endpoint, 10000, 10000);
+                return extractLatestFredRate(response);
+            } catch (IOException ignored) {
+                // Try the next endpoint.
+            } catch (ExternalDataException ignored) {
+                // Try the next endpoint.
+            }
         }
+
+        System.err.println("Warning: FRED unavailable. Falling back to default risk-free rate " + DEFAULT_RISK_FREE_RATE);
+        return DEFAULT_RISK_FREE_RATE;
     }
 
     private static double fetchExpectedAnnualMarketReturnFromYahooSp500() throws ExternalDataException {

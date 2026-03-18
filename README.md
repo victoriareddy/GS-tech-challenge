@@ -24,7 +24,7 @@ Base URL: `http://localhost:8080`
 
 Where:
 
-- `riskFreeRate` comes from the latest available FRED `DGS10` value (10-year Treasury, converted from percent to decimal)
+- `riskFreeRate` comes from the latest available FRED `DGS10` value (10-year Treasury, converted from percent to decimal), with a fallback default of `0.043` if FRED is temporarily unavailable
 - `beta` comes from Newton Analytics stock beta API
 - `expectedReturnRate` is the S&P 500 (`^GSPC`) 5-year average annualized return, computed from monthly close data
 
