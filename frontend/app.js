@@ -142,6 +142,7 @@ form.addEventListener("submit", async (event) => {
     document.getElementById("m-risk-free").textContent = toPercent(data.riskFreeRate);
     document.getElementById("m-beta").textContent = Number(data.beta).toFixed(3);
     document.getElementById("m-expected").textContent = toPercent(data.expectedReturnRate);
+    document.getElementById("m-market").textContent = toPercent(data.marketExpectedReturnRate);
     document.getElementById("m-capm").textContent = toPercent(data.capmRate);
   } catch (error) {
     resultPanel.hidden = true;

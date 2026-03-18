@@ -35,11 +35,13 @@ public class MutualFundCalculatorServer {
     private static final int FRED_READ_TIMEOUT_MS = 20000;
     private static final long BETA_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
     private static final long MARKET_RETURN_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
+    private static final long FUND_RETURN_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
     private static final long RISK_FREE_CACHE_TTL_MS = 60L * 60L * 1000L;
     private static final long RISK_FREE_FALLBACK_CACHE_TTL_MS = 10L * 60L * 1000L;
 
     private static final List<Fund> FUNDS;
     private static final Map<String, TimedValue> BETA_CACHE = new HashMap<String, TimedValue>();
+    private static final Map<String, TimedValue> FUND_RETURN_CACHE = new HashMap<String, TimedValue>();
     private static TimedValue cachedRiskFreeRate;
     private static TimedValue cachedExpectedMarketReturn;
 
@@ -141,8 +143,9 @@ public class MutualFundCalculatorServer {
             try {
                 double riskFreeRate = fetchRiskFreeRateFromFred();
                 double beta = fetchBetaFromNewton(ticker);
-                double expectedReturnRate = fetchExpectedAnnualMarketReturnFromYahooSp500();
-                double capmRate = riskFreeRate + beta * (expectedReturnRate - riskFreeRate);
+                double marketExpectedReturnRate = fetchExpectedAnnualMarketReturnFromYahooSp500();
+                double expectedReturnRate = fetchExpectedAnnualFundReturnFromYahoo(ticker);
+                double capmRate = riskFreeRate + beta * (marketExpectedReturnRate - riskFreeRate);
                 double futureValue = principal * Math.pow(1.0 + capmRate, years);
 
                 StringBuilder body = new StringBuilder();
@@ -153,6 +156,7 @@ public class MutualFundCalculatorServer {
                     .append("\"riskFreeRate\":").append(round(riskFreeRate, 6)).append(',')
                     .append("\"beta\":").append(round(beta, 6)).append(',')
                     .append("\"expectedReturnRate\":").append(round(expectedReturnRate, 6)).append(',')
+                    .append("\"marketExpectedReturnRate\":").append(round(marketExpectedReturnRate, 6)).append(',')
                     .append("\"capmRate\":").append(round(capmRate, 6)).append(',')
                     .append("\"futureValue\":").append(round(futureValue, 2))
                     .append("}");
@@ -378,6 +382,35 @@ public class MutualFundCalculatorServer {
         }
     }
 
+    private static double fetchExpectedAnnualFundReturnFromYahoo(String ticker) throws ExternalDataException {
+        long now = System.currentTimeMillis();
+        synchronized (FUND_RETURN_CACHE) {
+            TimedValue cached = FUND_RETURN_CACHE.get(ticker);
+            if (cached != null && cached.isValid(now)) {
+                return cached.value;
+            }
+        }
+
+        try {
+            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/" +
+                URLEncoder.encode(ticker, "UTF-8") +
+                "?range=1y&interval=1mo&events=history";
+            String response = httpGet(endpoint, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            List<Double> closes = extractCloseValues(response);
+            if (closes.size() < 2) {
+                throw new ExternalDataException("Insufficient close-price data for fund expected return", null);
+            }
+
+            double annualized = annualizeAverageMonthlyReturn(closes);
+            synchronized (FUND_RETURN_CACHE) {
+                FUND_RETURN_CACHE.put(ticker, new TimedValue(annualized, System.currentTimeMillis() + FUND_RETURN_CACHE_TTL_MS));
+            }
+            return annualized;
+        } catch (IOException e) {
+            throw new ExternalDataException("Yahoo Finance connection failed for fund expected return", e);
+        }
+    }
+
     private static double extractLatestFredRate(String csv) throws ExternalDataException {
         String[] lines = csv.split("\\r?\\n");
         for (int i = lines.length - 1; i >= 1; i--) {
@@ -555,6 +588,28 @@ public class MutualFundCalculatorServer {
             }
         }
         return closes;
+    }
+
+    private static double annualizeAverageMonthlyReturn(List<Double> closes) throws ExternalDataException {
+        double sumMonthlyReturns = 0.0;
+        int periods = 0;
+
+        for (int i = 1; i < closes.size(); i++) {
+            double previous = closes.get(i - 1);
+            double current = closes.get(i);
+            if (previous <= 0 || current <= 0) {
+                continue;
+            }
+            sumMonthlyReturns += (current / previous) - 1.0;
+            periods++;
+        }
+
+        if (periods == 0) {
+            throw new ExternalDataException("No valid monthly return periods found", null);
+        }
+
+        double averageMonthlyReturn = sumMonthlyReturns / periods;
+        return Math.pow(1.0 + averageMonthlyReturn, 12.0) - 1.0;
     }
 
     private static Map<String, String> parseQuery(String rawQuery) {
