@@ -26,7 +26,7 @@ Where:
 - `riskFreeRate` is hardcoded to `0.043` (4.30%)
 - `beta` comes from Newton Analytics stock beta API
 - `expectedReturnRate` is estimated from Yahoo Finance 1-year monthly close data:
-  - `(lastClose - firstClose) / firstClose`
+  - average month-over-month return across the previous year
 
 ## Project structure
 
@@ -63,7 +63,7 @@ Then open:
 
 ## Notes and assumptions
 
-- Mutual funds are hardcoded and exposed through `/api/funds`.
+- Mutual funds are hardcoded and exposed through `/api/funds`, with ETF support included as a bonus extension.
 - The backend validates ticker, principal, and years.
 - External market APIs can fail or rate-limit; backend returns `502` with a clear error payload in those cases.
 - CORS is enabled for local development (`Access-Control-Allow-Origin: *`).

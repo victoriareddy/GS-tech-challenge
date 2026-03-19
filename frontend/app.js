@@ -32,7 +32,7 @@ async function loadFunds() {
   try {
     const response = await fetch(`${API_BASE}/funds`);
     if (!response.ok) {
-      throw new Error("Failed to load mutual funds.");
+      throw new Error("Failed to load supported funds and ETFs.");
     }
 
     const data = await response.json();
@@ -40,11 +40,12 @@ async function loadFunds() {
     data.funds.forEach((fund) => {
       const option = document.createElement("option");
       option.value = fund.ticker;
-      option.textContent = `${fund.ticker} - ${fund.name}`;
+      const categoryLabel = fund.category ? ` (${fund.category})` : "";
+      option.textContent = `${fund.ticker} - ${fund.name}${categoryLabel}`;
       fundSelect.appendChild(option);
     });
   } catch (error) {
-    showError(error.message || "Unable to load funds from backend.");
+    showError(error.message || "Unable to load investments from backend.");
   }
 }
 

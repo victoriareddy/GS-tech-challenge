@@ -31,24 +31,35 @@ public class MutualFundCalculatorServer {
 
     static {
         List<Fund> funds = new ArrayList<Fund>();
-        funds.add(new Fund("VSMPX", "Vanguard Total Stock Market Index Fund Institutional Plus"));
-        funds.add(new Fund("FXAIX", "Fidelity 500 Index Fund"));
-        funds.add(new Fund("VFIAX", "Vanguard 500 Index Fund Admiral Shares"));
-        funds.add(new Fund("VTSAX", "Vanguard Total Stock Market Index Fund Admiral Shares"));
-        funds.add(new Fund("VMFXX", "Vanguard Federal Money Market Fund Investor"));
-        funds.add(new Fund("VGTSX", "Vanguard Total International Stock Index Fund Investor"));
-        funds.add(new Fund("SWVXX", "Schwab Value Advantage Money Fund Investor"));
-        funds.add(new Fund("FGTXX", "Goldman Sachs FS Government Fund Institutional"));
-        funds.add(new Fund("FCTDX", "Fidelity Strategic Advisers Fidelity U.S. Total Stock Fund"));
-        funds.add(new Fund("VIIIX", "Vanguard Institutional Index Fund Institutional Plus"));
-        funds.add(new Fund("VTBNX", "Vanguard Total Bond Market II Index Fund Institutional"));
-        funds.add(new Fund("MVRXX", "Morgan Stanley Institutional Liquidity Government Portfolio Institutional"));
-        funds.add(new Fund("GVMXX", "State Street U.S. Government Money Market Fund Premier"));
-        funds.add(new Fund("AGTHX", "American Funds Growth Fund of America A"));
-        funds.add(new Fund("VTBIX", "Vanguard Total Bond Market II Index Fund Investor"));
-        funds.add(new Fund("FCNTX", "Fidelity Contrafund"));
-        funds.add(new Fund("SNAXX", "Schwab Value Advantage Money Fund Ultra"));
-        funds.add(new Fund("PIMIX", "PIMCO Income Fund Institutional"));
+        funds.add(new Fund("VSMPX", "Vanguard Total Stock Market Index Fund Institutional Plus", "Mutual Fund"));
+        funds.add(new Fund("FXAIX", "Fidelity 500 Index Fund", "Mutual Fund"));
+        funds.add(new Fund("VFIAX", "Vanguard 500 Index Fund Admiral Shares", "Mutual Fund"));
+        funds.add(new Fund("VTSAX", "Vanguard Total Stock Market Index Fund Admiral Shares", "Mutual Fund"));
+        funds.add(new Fund("VGTSX", "Vanguard Total International Stock Index Fund Investor", "Mutual Fund"));
+        funds.add(new Fund("SWVXX", "Schwab Value Advantage Money Fund Investor", "Mutual Fund"));
+        funds.add(new Fund("FGTXX", "Goldman Sachs FS Government Fund Institutional", "Mutual Fund"));
+        funds.add(new Fund("FCTDX", "Fidelity Strategic Advisers Fidelity U.S. Total Stock Fund", "Mutual Fund"));
+        funds.add(new Fund("VIIIX", "Vanguard Institutional Index Fund Institutional Plus", "Mutual Fund"));
+        funds.add(new Fund("VTBNX", "Vanguard Total Bond Market II Index Fund Institutional", "Mutual Fund"));
+        funds.add(new Fund("MVRXX", "Morgan Stanley Institutional Liquidity Government Portfolio Institutional", "Mutual Fund"));
+        funds.add(new Fund("GVMXX", "State Street U.S. Government Money Market Fund Premier", "Mutual Fund"));
+        funds.add(new Fund("AGTHX", "American Funds Growth Fund of America A", "Mutual Fund"));
+        funds.add(new Fund("VTBIX", "Vanguard Total Bond Market II Index Fund Investor", "Mutual Fund"));
+        funds.add(new Fund("FCNTX", "Fidelity Contrafund", "Mutual Fund"));
+        funds.add(new Fund("SNAXX", "Schwab Value Advantage Money Fund Ultra", "Mutual Fund"));
+        funds.add(new Fund("PIMIX", "PIMCO Income Fund Institutional", "Mutual Fund"));
+        funds.add(new Fund("SPY", "SPDR S&P 500 ETF Trust", "ETF"));
+        funds.add(new Fund("VOO", "Vanguard S&P 500 ETF", "ETF"));
+        funds.add(new Fund("IVV", "iShares Core S&P 500 ETF", "ETF"));
+        funds.add(new Fund("VTI", "Vanguard Total Stock Market ETF", "ETF"));
+        funds.add(new Fund("QQQ", "Invesco QQQ Trust", "ETF"));
+        funds.add(new Fund("VEA", "Vanguard FTSE Developed Markets ETF", "ETF"));
+        funds.add(new Fund("VXUS", "Vanguard Total International Stock ETF", "ETF"));
+        funds.add(new Fund("BND", "Vanguard Total Bond Market ETF", "ETF"));
+        funds.add(new Fund("SCHD", "Schwab U.S. Dividend Equity ETF", "ETF"));
+        funds.add(new Fund("DIA", "SPDR Dow Jones Industrial Average ETF Trust", "ETF"));
+        funds.add(new Fund("IWM", "iShares Russell 2000 ETF", "ETF"));
+        funds.add(new Fund("XLK", "Technology Select Sector SPDR Fund", "ETF"));
         FUNDS = Collections.unmodifiableList(funds);
     }
 
@@ -59,7 +70,7 @@ public class MutualFundCalculatorServer {
         server.createContext("/api/health", new HealthHandler());
         server.setExecutor(null);
 
-        System.out.println("Mutual Fund Calculator backend listening on http://localhost:" + PORT);
+        System.out.println("Investment Calculator backend listening on http://localhost:" + PORT);
         server.start();
     }
 
@@ -79,7 +90,8 @@ public class MutualFundCalculatorServer {
                     body.append(',');
                 }
                 body.append("{\"ticker\":\"").append(escapeJson(fund.ticker)).append("\",")
-                    .append("\"name\":\"").append(escapeJson(fund.name)).append("\"}");
+                    .append("\"name\":\"").append(escapeJson(fund.name)).append("\",")
+                    .append("\"category\":\"").append(escapeJson(fund.category)).append("\"}");
             }
             body.append("]}");
             sendJson(exchange, 200, body.toString());
@@ -105,7 +117,7 @@ public class MutualFundCalculatorServer {
             }
 
             if (!isSupportedTicker(ticker)) {
-                sendError(exchange, 400, "Unsupported ticker. Use /api/funds to choose a valid mutual fund.");
+                sendError(exchange, 400, "Unsupported ticker. Use /api/funds to choose a supported investment.");
                 return;
             }
 
@@ -200,21 +212,37 @@ public class MutualFundCalculatorServer {
                 "?range=1y&interval=1mo&events=history";
             String response = httpGet(endpoint, 10000, 10000);
 
-            // Use first and last valid monthly close to approximate last-year performance.
+            // Use average month-over-month return across the last year to better match
+            // the challenge wording around historical average returns.
             List<Double> closes = extractCloseValues(response);
             if (closes.size() < 2) {
                 throw new ExternalDataException("Insufficient close-price data from Yahoo Finance", null);
             }
-
-            double first = closes.get(0);
-            double last = closes.get(closes.size() - 1);
-            if (first <= 0) {
-                throw new ExternalDataException("Invalid first close value from Yahoo Finance", null);
-            }
-            return (last - first) / first;
+            return calculateAverageHistoricalReturn(closes);
         } catch (IOException e) {
             throw new ExternalDataException("Yahoo Finance connection failed", e);
         }
+    }
+
+    private static double calculateAverageHistoricalReturn(List<Double> closes) throws ExternalDataException {
+        double totalReturn = 0.0;
+        int periods = 0;
+
+        for (int i = 1; i < closes.size(); i++) {
+            double previous = closes.get(i - 1);
+            double current = closes.get(i);
+            if (previous <= 0) {
+                throw new ExternalDataException("Invalid close value from Yahoo Finance", null);
+            }
+            totalReturn += (current - previous) / previous;
+            periods++;
+        }
+
+        if (periods == 0) {
+            throw new ExternalDataException("Insufficient close-price periods from Yahoo Finance", null);
+        }
+
+        return totalReturn / periods;
     }
 
     private static String httpGet(String endpoint, int connectTimeoutMs, int readTimeoutMs) throws IOException, ExternalDataException {
@@ -355,10 +383,12 @@ public class MutualFundCalculatorServer {
     private static class Fund {
         private final String ticker;
         private final String name;
+        private final String category;
 
-        private Fund(String ticker, String name) {
+        private Fund(String ticker, String name, String category) {
             this.ticker = ticker;
             this.name = name;
+            this.category = category;
         }
     }
 
