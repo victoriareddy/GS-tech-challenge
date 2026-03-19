@@ -7,6 +7,7 @@ This repository contains a complete full-stack implementation of the **2026 Engi
 - Java backend with REST APIs
 - Frontend web UI for selecting a mutual fund and calculating projected value
 - CAPM-based future value calculation using live market inputs
+- One-command start/stop scripts (`start.sh`, `stop.sh`)
 
 ## Backend APIs
 
@@ -23,10 +24,10 @@ Base URL: `http://localhost:8080`
 
 Where:
 
-- `riskFreeRate` is hardcoded to `0.043` (4.30%)
+- `riskFreeRate` comes from the latest available FRED `DGS10` value (10-year Treasury, converted from percent to decimal), with a fallback default of `0.043` if FRED is temporarily unavailable
 - `beta` comes from Newton Analytics stock beta API
-- `expectedReturnRate` is estimated from Yahoo Finance 1-year monthly close data:
-  - average month-over-month return across the previous year
+- `expectedReturnRate` is the selected fund's 1-year average annualized return, computed from Yahoo Finance monthly close data
+- `marketExpectedReturnRate` is the S&P 500 (`^GSPC`) 5-year average annualized return, computed from monthly close data
 
 ## Project structure
 
@@ -37,29 +38,48 @@ Where:
 
 ## Run instructions
 
-### 1) Start backend
+### 1) Start everything with one command
 
 ```bash
-cd backend
-javac -d bin src/MutualFundCalculatorServer.java
-java -cp bin MutualFundCalculatorServer
+./start.sh
 ```
 
-Backend starts on `http://localhost:8080`.
+This starts:
+- Backend on `http://localhost:8080`
+- Frontend static server on `http://localhost:5500`
 
 ### 2) Open frontend
 
-Open `frontend/index.html` in your browser.
+- `http://localhost:5500/frontend/index.html`
 
-If your browser blocks local-file fetches, run a simple local static server from repository root:
+### 3) Stop everything
 
 ```bash
-python3 -m http.server 5500
+./stop.sh
 ```
 
-Then open:
+Notes:
+- `start.sh` also cleans up on `Ctrl+C` when run in the foreground.
+- If you use custom ports:
 
-- `http://localhost:5500/frontend/index.html`
+```bash
+BACKEND_PORT=8080 FRONTEND_PORT=5500 ./stop.sh
+```
+
+### FRED diagnostics (if risk-free rate falls back)
+
+Run:
+
+```bash
+./fred_diagnose.sh
+```
+
+Optional: set `FRED_API_KEY` to use the official FRED API endpoint:
+
+```bash
+export FRED_API_KEY=your_key_here
+./start.sh
+```
 
 ## Notes and assumptions
 

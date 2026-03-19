@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.HttpURLConnection;
@@ -15,6 +16,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,9 +27,23 @@ import java.util.regex.Pattern;
 
 public class MutualFundCalculatorServer {
     private static final int PORT = 8080;
-    private static final double RISK_FREE_RATE = 0.043; // 4.30%
+    private static final double DEFAULT_RISK_FREE_RATE = 0.043; // Fallback if FRED is unavailable.
+    private static final String FRED_API_KEY = System.getenv("FRED_API_KEY");
+    private static final int CONNECT_TIMEOUT_MS = 5000;
+    private static final int READ_TIMEOUT_MS = 5000;
+    private static final int FRED_CONNECT_TIMEOUT_MS = 10000;
+    private static final int FRED_READ_TIMEOUT_MS = 20000;
+    private static final long BETA_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
+    private static final long MARKET_RETURN_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
+    private static final long FUND_RETURN_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
+    private static final long RISK_FREE_CACHE_TTL_MS = 60L * 60L * 1000L;
+    private static final long RISK_FREE_FALLBACK_CACHE_TTL_MS = 10L * 60L * 1000L;
 
     private static final List<Fund> FUNDS;
+    private static final Map<String, TimedValue> BETA_CACHE = new HashMap<String, TimedValue>();
+    private static final Map<String, TimedValue> FUND_RETURN_CACHE = new HashMap<String, TimedValue>();
+    private static TimedValue cachedRiskFreeRate;
+    private static TimedValue cachedExpectedMarketReturn;
 
     static {
         List<Fund> funds = new ArrayList<Fund>();
@@ -137,9 +153,11 @@ public class MutualFundCalculatorServer {
             }
 
             try {
+                double riskFreeRate = fetchRiskFreeRateFromFred();
                 double beta = fetchBetaFromNewton(ticker);
-                double expectedReturnRate = fetchExpectedAnnualReturnFromYahoo(ticker);
-                double capmRate = RISK_FREE_RATE + beta * (expectedReturnRate - RISK_FREE_RATE);
+                double marketExpectedReturnRate = fetchExpectedAnnualMarketReturnFromYahooSp500();
+                double expectedReturnRate = fetchExpectedAnnualFundReturnFromYahoo(ticker);
+                double capmRate = riskFreeRate + beta * (marketExpectedReturnRate - riskFreeRate);
                 double futureValue = principal * Math.pow(1.0 + capmRate, years);
 
                 StringBuilder body = new StringBuilder();
@@ -147,9 +165,10 @@ public class MutualFundCalculatorServer {
                     .append("\"ticker\":\"").append(escapeJson(ticker)).append("\",")
                     .append("\"principal\":").append(round(principal, 2)).append(',')
                     .append("\"years\":").append(round(years, 2)).append(',')
-                    .append("\"riskFreeRate\":").append(round(RISK_FREE_RATE, 6)).append(',')
+                    .append("\"riskFreeRate\":").append(round(riskFreeRate, 6)).append(',')
                     .append("\"beta\":").append(round(beta, 6)).append(',')
                     .append("\"expectedReturnRate\":").append(round(expectedReturnRate, 6)).append(',')
+                    .append("\"marketExpectedReturnRate\":").append(round(marketExpectedReturnRate, 6)).append(',')
                     .append("\"capmRate\":").append(round(capmRate, 6)).append(',')
                     .append("\"futureValue\":").append(round(futureValue, 2))
                     .append("}");
@@ -191,58 +210,262 @@ public class MutualFundCalculatorServer {
     }
 
     private static double fetchBetaFromNewton(String ticker) throws ExternalDataException {
+        long now = System.currentTimeMillis();
+        synchronized (BETA_CACHE) {
+            TimedValue cached = BETA_CACHE.get(ticker);
+            if (cached != null && cached.isValid(now)) {
+                return cached.value;
+            }
+        }
+
         try {
             String endpoint = "https://api.newtonanalytics.com/stock-beta/?ticker=" +
                 URLEncoder.encode(ticker, "UTF-8") +
                 "&index=%5EGSPC&interval=1mo&observations=12";
-            String response = httpGet(endpoint, 10000, 10000);
+            String response = httpGet(endpoint, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            double beta;
             if (response.contains("\"beta\"")) {
-                return extractNumericField(response, "beta");
+                beta = extractNumericField(response, "beta");
+            } else {
+                beta = extractNumericField(response, "data");
             }
-            return extractNumericField(response, "data");
+
+            synchronized (BETA_CACHE) {
+                BETA_CACHE.put(ticker, new TimedValue(beta, System.currentTimeMillis() + BETA_CACHE_TTL_MS));
+            }
+            return beta;
         } catch (IOException e) {
             throw new ExternalDataException("Newton API connection failed", e);
         }
     }
 
-    private static double fetchExpectedAnnualReturnFromYahoo(String ticker) throws ExternalDataException {
-        try {
-            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/" +
-                URLEncoder.encode(ticker, "UTF-8") +
-                "?range=1y&interval=1mo&events=history";
-            String response = httpGet(endpoint, 10000, 10000);
+    private static double fetchRiskFreeRateFromFred() throws ExternalDataException {
+        synchronized (MutualFundCalculatorServer.class) {
+            if (cachedRiskFreeRate != null && cachedRiskFreeRate.isValid(System.currentTimeMillis())) {
+                return cachedRiskFreeRate.value;
+            }
+        }
 
-            // Use average month-over-month return across the last year to better match
-            // the challenge wording around historical average returns.
+        String today = LocalDate.now().toString();
+        String thirtyDaysAgo = LocalDate.now().minusDays(30).toString();
+        String sixtyDaysAgo = LocalDate.now().minusDays(60).toString();
+        String[] endpoints = new String[] {
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=" + thirtyDaysAgo + "&coed=" + today,
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=" + sixtyDaysAgo + "&coed=" + today
+        };
+
+        String lastFailure = "unknown";
+        if (hasText(FRED_API_KEY)) {
+            long startMs = System.currentTimeMillis();
+            try {
+                double value = fetchRiskFreeRateFromFredApi(FRED_API_KEY.trim());
+                synchronized (MutualFundCalculatorServer.class) {
+                    cachedRiskFreeRate = new TimedValue(value, System.currentTimeMillis() + RISK_FREE_CACHE_TTL_MS);
+                }
+                System.out.println("FRED success via official API in " + (System.currentTimeMillis() - startMs) + "ms");
+                return value;
+            } catch (Exception e) {
+                lastFailure = "official-api -> " + e.getClass().getSimpleName() + ": " + safeMessage(e);
+                System.err.println("FRED official API failed in " + (System.currentTimeMillis() - startMs) +
+                    "ms: " + safeMessage(e));
+            }
+        } else {
+            System.err.println("FRED_API_KEY is not set; using CSV fallback endpoints.");
+        }
+
+        for (String endpoint : endpoints) {
+            long javaStartMs = System.currentTimeMillis();
+            try {
+                String response = httpGet(endpoint, FRED_CONNECT_TIMEOUT_MS, FRED_READ_TIMEOUT_MS);
+                double value = extractLatestFredRate(response);
+                synchronized (MutualFundCalculatorServer.class) {
+                    cachedRiskFreeRate = new TimedValue(value, System.currentTimeMillis() + RISK_FREE_CACHE_TTL_MS);
+                }
+                System.out.println("FRED success via Java CSV in " + (System.currentTimeMillis() - javaStartMs) +
+                    "ms endpoint=" + endpoint);
+                return value;
+            } catch (IOException e) {
+                lastFailure = endpoint + " -> java: " + e.getClass().getSimpleName() + ": " + safeMessage(e) +
+                    " (" + (System.currentTimeMillis() - javaStartMs) + "ms)";
+                System.err.println("FRED Java fetch failed: " + lastFailure);
+                long curlStartMs = System.currentTimeMillis();
+                try {
+                    String response = httpGetViaCurl(endpoint, FRED_CONNECT_TIMEOUT_MS, FRED_READ_TIMEOUT_MS);
+                    double value = extractLatestFredRate(response);
+                    synchronized (MutualFundCalculatorServer.class) {
+                        cachedRiskFreeRate = new TimedValue(value, System.currentTimeMillis() + RISK_FREE_CACHE_TTL_MS);
+                    }
+                    System.out.println("FRED success via curl CSV in " + (System.currentTimeMillis() - curlStartMs) +
+                        "ms endpoint=" + endpoint);
+                    return value;
+                } catch (Exception curlError) {
+                    lastFailure = endpoint + " -> java: " + e.getClass().getSimpleName() + ": " + safeMessage(e)
+                        + " | curl: " + curlError.getClass().getSimpleName() + ": " + safeMessage(curlError)
+                        + " (" + (System.currentTimeMillis() - curlStartMs) + "ms)";
+                }
+            } catch (ExternalDataException e) {
+                lastFailure = endpoint + " -> parse: " + safeMessage(e) +
+                    " (" + (System.currentTimeMillis() - javaStartMs) + "ms)";
+                System.err.println("FRED Java parse failed: " + lastFailure);
+                long curlStartMs = System.currentTimeMillis();
+                try {
+                    String response = httpGetViaCurl(endpoint, FRED_CONNECT_TIMEOUT_MS, FRED_READ_TIMEOUT_MS);
+                    double value = extractLatestFredRate(response);
+                    synchronized (MutualFundCalculatorServer.class) {
+                        cachedRiskFreeRate = new TimedValue(value, System.currentTimeMillis() + RISK_FREE_CACHE_TTL_MS);
+                    }
+                    System.out.println("FRED success via curl CSV in " + (System.currentTimeMillis() - curlStartMs) +
+                        "ms endpoint=" + endpoint);
+                    return value;
+                } catch (Exception curlError) {
+                    lastFailure = endpoint + " -> parse: " + safeMessage(e)
+                        + " | curl: " + curlError.getClass().getSimpleName() + ": " + safeMessage(curlError)
+                        + " (" + (System.currentTimeMillis() - curlStartMs) + "ms)";
+                }
+            }
+        }
+
+        System.err.println(
+            "Warning: FRED unavailable. Falling back to default risk-free rate " +
+            DEFAULT_RISK_FREE_RATE + ". Last failure: " + lastFailure
+        );
+        synchronized (MutualFundCalculatorServer.class) {
+            cachedRiskFreeRate = new TimedValue(
+                DEFAULT_RISK_FREE_RATE,
+                System.currentTimeMillis() + RISK_FREE_FALLBACK_CACHE_TTL_MS
+            );
+        }
+        return DEFAULT_RISK_FREE_RATE;
+    }
+
+    private static double fetchRiskFreeRateFromFredApi(String apiKey) throws ExternalDataException {
+        try {
+            String endpoint = "https://api.stlouisfed.org/fred/series/observations?series_id=DGS10" +
+                "&sort_order=desc&limit=10&file_type=json&api_key=" + URLEncoder.encode(apiKey, "UTF-8");
+            String response = httpGet(endpoint, FRED_CONNECT_TIMEOUT_MS, FRED_READ_TIMEOUT_MS);
+            return extractLatestFredRateFromJson(response);
+        } catch (IOException e) {
+            throw new ExternalDataException("FRED official API connection failed", e);
+        }
+    }
+
+    private static double fetchExpectedAnnualMarketReturnFromYahooSp500() throws ExternalDataException {
+        synchronized (MutualFundCalculatorServer.class) {
+            if (cachedExpectedMarketReturn != null && cachedExpectedMarketReturn.isValid(System.currentTimeMillis())) {
+                return cachedExpectedMarketReturn.value;
+            }
+        }
+
+        try {
+            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1mo&events=history";
+            String response = httpGet(endpoint, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+
+            // Calculate average annualized return from 5 years of monthly S&P 500 closes.
             List<Double> closes = extractCloseValues(response);
             if (closes.size() < 2) {
                 throw new ExternalDataException("Insufficient close-price data from Yahoo Finance", null);
             }
-            return calculateAverageHistoricalReturn(closes);
+
+            double compoundedGrowth = 1.0;
+            int periods = 0;
+            for (int i = 1; i < closes.size(); i++) {
+                double previous = closes.get(i - 1);
+                double current = closes.get(i);
+                if (previous <= 0 || current <= 0) {
+                    continue;
+                }
+                compoundedGrowth *= (current / previous);
+                periods++;
+            }
+            if (periods == 0) {
+                throw new ExternalDataException("No valid return periods in Yahoo Finance data", null);
+            }
+
+            double annualizedReturn = Math.pow(compoundedGrowth, 12.0 / periods) - 1.0;
+            synchronized (MutualFundCalculatorServer.class) {
+                cachedExpectedMarketReturn = new TimedValue(
+                    annualizedReturn,
+                    System.currentTimeMillis() + MARKET_RETURN_CACHE_TTL_MS
+                );
+            }
+            return annualizedReturn;
         } catch (IOException e) {
             throw new ExternalDataException("Yahoo Finance connection failed", e);
         }
     }
 
-    private static double calculateAverageHistoricalReturn(List<Double> closes) throws ExternalDataException {
-        double totalReturn = 0.0;
-        int periods = 0;
-
-        for (int i = 1; i < closes.size(); i++) {
-            double previous = closes.get(i - 1);
-            double current = closes.get(i);
-            if (previous <= 0) {
-                throw new ExternalDataException("Invalid close value from Yahoo Finance", null);
+    private static double fetchExpectedAnnualFundReturnFromYahoo(String ticker) throws ExternalDataException {
+        long now = System.currentTimeMillis();
+        synchronized (FUND_RETURN_CACHE) {
+            TimedValue cached = FUND_RETURN_CACHE.get(ticker);
+            if (cached != null && cached.isValid(now)) {
+                return cached.value;
             }
-            totalReturn += (current - previous) / previous;
-            periods++;
         }
 
-        if (periods == 0) {
-            throw new ExternalDataException("Insufficient close-price periods from Yahoo Finance", null);
+        try {
+            String endpoint = "https://query1.finance.yahoo.com/v8/finance/chart/" +
+                URLEncoder.encode(ticker, "UTF-8") +
+                "?range=1y&interval=1mo&events=history";
+            String response = httpGet(endpoint, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            List<Double> closes = extractCloseValues(response);
+            if (closes.size() < 2) {
+                throw new ExternalDataException("Insufficient close-price data for fund expected return", null);
+            }
+
+            double annualized = annualizeAverageMonthlyReturn(closes);
+            synchronized (FUND_RETURN_CACHE) {
+                FUND_RETURN_CACHE.put(ticker, new TimedValue(annualized, System.currentTimeMillis() + FUND_RETURN_CACHE_TTL_MS));
+            }
+            return annualized;
+        } catch (IOException e) {
+            throw new ExternalDataException("Yahoo Finance connection failed for fund expected return", e);
+        }
+    }
+
+    private static double extractLatestFredRate(String csv) throws ExternalDataException {
+        String[] lines = csv.split("\\r?\\n");
+        for (int i = lines.length - 1; i >= 1; i--) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            String[] columns = line.split(",", 2);
+            if (columns.length < 2) {
+                continue;
+            }
+
+            String value = columns[1].trim();
+            if (value.isEmpty() || ".".equals(value)) {
+                continue;
+            }
+
+            try {
+                return Double.parseDouble(value) / 100.0;
+            } catch (NumberFormatException ignored) {
+                // Keep scanning for a valid numeric row.
+            }
         }
 
-        return totalReturn / periods;
+        throw new ExternalDataException("No valid DGS10 value found in FRED response", null);
+    }
+
+    private static double extractLatestFredRateFromJson(String json) throws ExternalDataException {
+        Pattern pattern = Pattern.compile("\\\"value\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+        Matcher matcher = pattern.matcher(json);
+        while (matcher.find()) {
+            String value = matcher.group(1).trim();
+            if (value.isEmpty() || ".".equals(value)) {
+                continue;
+            }
+            try {
+                return Double.parseDouble(value) / 100.0;
+            } catch (NumberFormatException ignored) {
+                // Keep scanning for a valid numeric value.
+            }
+        }
+        throw new ExternalDataException("No valid DGS10 value found in FRED JSON response", null);
     }
 
     private static String httpGet(String endpoint, int connectTimeoutMs, int readTimeoutMs) throws IOException, ExternalDataException {
@@ -253,8 +476,13 @@ public class MutualFundCalculatorServer {
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(connectTimeoutMs);
             connection.setReadTimeout(readTimeoutMs);
-            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Accept", "*/*");
             connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+            if (endpoint.contains("stlouisfed.org")) {
+                connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+                connection.setRequestProperty("Referer", "https://fred.stlouisfed.org/");
+                connection.setRequestProperty("Cache-Control", "no-cache");
+            }
 
             int code = connection.getResponseCode();
             InputStream stream;
@@ -273,12 +501,66 @@ public class MutualFundCalculatorServer {
         }
     }
 
+    private static String httpGetViaCurl(String endpoint, int connectTimeoutMs, int readTimeoutMs) throws IOException, ExternalDataException {
+        int maxTimeSeconds = Math.max(5, (connectTimeoutMs + readTimeoutMs) / 1000);
+        ProcessBuilder pb = new ProcessBuilder(
+            "curl",
+            "--http1.1",
+            "-L",
+            "--silent",
+            "--show-error",
+            "--retry", "2",
+            "--retry-delay", "1",
+            "--connect-timeout", String.valueOf(Math.max(3, connectTimeoutMs / 1000)),
+            "--max-time", String.valueOf(maxTimeSeconds),
+            "-A", "Mozilla/5.0",
+            "-H", "Accept: text/csv,*/*;q=0.9",
+            endpoint
+        );
+        Process process = pb.start();
+        byte[] stdout = readAllBytes(process.getInputStream());
+        byte[] stderr = readAllBytes(process.getErrorStream());
+        try {
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new ExternalDataException("curl failed with exit " + exitCode + " stderr=" +
+                    new String(stderr, StandardCharsets.UTF_8), null);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for curl", e);
+        }
+
+        return new String(stdout, StandardCharsets.UTF_8);
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private static String safeMessage(Throwable throwable) {
+        if (throwable == null || throwable.getMessage() == null) {
+            return "(no message)";
+        }
+        return throwable.getMessage();
+    }
+
+    private static byte[] readAllBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[4096];
+        int n;
+        while ((n = in.read(chunk)) != -1) {
+            buffer.write(chunk, 0, n);
+        }
+        return buffer.toByteArray();
+    }
+
     private static String readStream(InputStream stream) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {
-            sb.append(line);
+            sb.append(line).append('\n');
         }
         return sb.toString();
     }
@@ -318,6 +600,28 @@ public class MutualFundCalculatorServer {
             }
         }
         return closes;
+    }
+
+    private static double annualizeAverageMonthlyReturn(List<Double> closes) throws ExternalDataException {
+        double sumMonthlyReturns = 0.0;
+        int periods = 0;
+
+        for (int i = 1; i < closes.size(); i++) {
+            double previous = closes.get(i - 1);
+            double current = closes.get(i);
+            if (previous <= 0 || current <= 0) {
+                continue;
+            }
+            sumMonthlyReturns += (current / previous) - 1.0;
+            periods++;
+        }
+
+        if (periods == 0) {
+            throw new ExternalDataException("No valid monthly return periods found", null);
+        }
+
+        double averageMonthlyReturn = sumMonthlyReturns / periods;
+        return Math.pow(1.0 + averageMonthlyReturn, 12.0) - 1.0;
     }
 
     private static Map<String, String> parseQuery(String rawQuery) {
@@ -395,6 +699,20 @@ public class MutualFundCalculatorServer {
     private static class ExternalDataException extends Exception {
         private ExternalDataException(String message, Throwable cause) {
             super(message, cause);
+        }
+    }
+
+    private static class TimedValue {
+        private final double value;
+        private final long expiresAtMs;
+
+        private TimedValue(double value, long expiresAtMs) {
+            this.value = value;
+            this.expiresAtMs = expiresAtMs;
+        }
+
+        private boolean isValid(long nowMs) {
+            return nowMs < expiresAtMs;
         }
     }
 }
