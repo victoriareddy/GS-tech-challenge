@@ -4,43 +4,450 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mutual Fund Calculator</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:           #0b0f1a;
+      --surface:      #111827;
+      --card:         #1a2235;
+      --border:       #243049;
+      --accent:       #3b82f6;
+      --accent2:      #60a5fa;
+      --gold:         #f5c842;
+      --text:         #e8edf5;
+      --muted:        #6b7fa3;
+      --success:      #34d399;
+      --error-bg:     #2d1a1a;
+      --error-border: #7f1d1d;
+      --error-text:   #fca5a5;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ── */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(11,15,26,0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--gold));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .logo-text {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .logo-text span { color: var(--gold); }
+
+    .chat-cta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      color: #fff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 14px rgba(59,130,246,0.3);
+    }
+
+    .chat-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+    .chat-cta:active { transform: scale(0.97); }
+
+    .chat-cta .pulse {
+      width: 8px; height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0.6); }
+      70%  { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
+      100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      z-index: 5;
+      text-align: center;
+      padding: 48px 32px 32px;
+    }
+
+    .hero-label {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid rgba(245,200,66,0.3);
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .hero h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 5vw, 2.8rem);
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      animation: fadeUp 0.55s ease 0.08s both;
+    }
+
+    .hero h1 em { font-style: italic; color: var(--gold); }
+
+    .hero p {
+      margin-top: 12px;
+      font-size: 0.92rem;
+      color: var(--muted);
+      max-width: 460px;
+      margin-inline: auto;
+      line-height: 1.65;
+      animation: fadeUp 0.55s ease 0.16s both;
+    }
+
+    /* ── Main layout — single centered column ── */
+    main.layout {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 560px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px 48px;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      animation: fadeUp 0.55s ease 0.22s both;
+    }
+
+    .panel h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+      margin-bottom: 22px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel h2 .icon {
+      font-size: 1rem;
+      background: rgba(59,130,246,0.12);
+      border-radius: 8px;
+      padding: 5px 7px;
+    }
+
+    /* ── Form ── */
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 14px;
+    }
+
+    .form label:first-of-type { margin-top: 0; }
+
+    .form select,
+    .form input[type="number"] {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    .form select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7fa3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    .form select:focus,
+    .form input:focus {
+      border-color: rgba(59,130,246,0.5);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.08);
+    }
+
+    .form select option { background: var(--card); }
+    .form input::placeholder { color: var(--muted); }
+
+    .form button[type="submit"] {
+      margin-top: 22px;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      border: none;
+      border-radius: 11px;
+      color: #fff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 14px rgba(59,130,246,0.3);
+      letter-spacing: 0.01em;
+    }
+
+    .form button[type="submit"]:hover { opacity: 0.88; transform: translateY(-1px); }
+    .form button[type="submit"]:active { transform: scale(0.97); }
+
+    /* ── Result panel ── */
+    .future-value-display {
+      text-align: center;
+      padding: 20px 0 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .future-value-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .big {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2.8rem;
+      letter-spacing: -0.04em;
+      color: var(--success);
+      line-height: 1;
+    }
+
+    .metrics {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    .metric-label { color: var(--muted); font-weight: 500; }
+    .metric-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .metric-value.highlight { color: var(--accent2); }
+    .metric-value.gold      { color: var(--gold); }
+
+    .metric-right { display: flex; align-items: center; gap: 8px; }
+
+    .source-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 20px;
+      cursor: help;
+      white-space: nowrap;
+    }
+    .source-badge.live   { background: rgba(52,211,153,0.15); color: var(--success); border: 1px solid rgba(52,211,153,0.35); }
+    .source-badge.cached { background: rgba(245,200,66,0.12); color: var(--gold);    border: 1px solid rgba(245,200,66,0.3); }
+
+    /* ── Error panel ── */
+    .panel.error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-text);
+      font-size: 0.88rem;
+      line-height: 1.6;
+      padding: 16px 20px;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      position: relative;
+      z-index: 5;
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--muted);
+      padding: 0 24px 32px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 14px 16px; }
+      .hero  { padding: 32px 16px 24px; }
+      main.layout { padding: 0 16px 40px; }
+    }
+  </style>
 </head>
 <body>
-  <main class="layout">
-    <section class="panel">
-      <h1>Mutual Fund Calculator</h1>
-      <p class="subtitle">Estimate future value using CAPM, with ETF support included as a bonus extension.</p>
 
+  <header>
+    <a href="index.html" class="logo">
+      <div class="logo-icon">📈</div>
+      <div class="logo-text">Team <span>7</span></div>
+    </a>
+    <a href="chat.html" class="chat-cta">
+      <div class="pulse"></div>
+      Ask AI Advisor
+    </a>
+  </header>
+
+  <div class="hero">
+    <div class="hero-label">CAPM Calculator</div>
+    <h1>Project your <em>future wealth</em><br>with precision</h1>
+    <p>Estimate future value using the Capital Asset Pricing Model, with full ETF support included.</p>
+  </div>
+
+  <main class="layout">
+
+    <section class="panel">
+      <h2><span class="icon">🧮</span> Calculator</h2>
       <form id="calc-form" class="form">
         <label for="fund-select">Fund or ETF</label>
         <select id="fund-select" required></select>
 
-        <label for="principal">Initial investment ($)</label>
+        <label for="principal">Initial Investment ($)</label>
         <input id="principal" type="number" min="1" step="0.01" placeholder="10000" required />
 
-        <label for="years">Time horizon (years)</label>
+        <label for="years">Time Horizon (years)</label>
         <input id="years" type="number" min="0.1" step="0.1" placeholder="5" required />
 
-        <button type="submit">Calculate Future Value</button>
+        <button type="submit">Calculate Future Value →</button>
       </form>
     </section>
 
-    <section class="panel result" id="result-panel" hidden>
-      <h2>Projection</h2>
-      <p class="big" id="future-value">$0.00</p>
+    <section class="panel" id="result-panel" hidden>
+      <h2><span class="icon">📊</span> Projection</h2>
+      <div class="future-value-display">
+        <div class="future-value-label">Estimated Future Value</div>
+        <div class="big" id="future-value">$0.00</div>
+      </div>
       <div class="metrics">
-        <p><strong>Ticker:</strong> <span id="m-ticker">-</span></p>
-        <p><strong>Risk-free rate:</strong> <span id="m-risk-free">-</span></p>
-        <p><strong>Beta:</strong> <span id="m-beta">-</span></p>
-        <p><strong>Fund return (1Y avg):</strong> <span id="m-expected">-</span></p>
-        <p><strong>Market return (S&amp;P 5Y):</strong> <span id="m-market">-</span></p>
-        <p><strong>CAPM rate:</strong> <span id="m-capm">-</span></p>
+        <div class="metric-row">
+          <span class="metric-label">Ticker</span>
+          <span class="metric-value highlight" id="m-ticker">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Risk-free Rate <small style="color:var(--muted);font-weight:400">(FRED hardcoded)</small></span>
+          <div class="metric-right">
+            <span class="metric-value" id="m-risk-free">—</span>
+            <span class="source-badge cached" id="badge-rf" hidden title="">📦 Hardcoded</span>
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Beta <small style="color:var(--muted);font-weight:400">(Newton Analytics)</small></span>
+          <div class="metric-right">
+            <span class="metric-value" id="m-beta">—</span>
+            <span class="source-badge" id="badge-beta" hidden></span>
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Fund Return (1Y avg) <small style="color:var(--muted);font-weight:400">(Yahoo Finance)</small></span>
+          <div class="metric-right">
+            <span class="metric-value gold" id="m-expected">—</span>
+            <span class="source-badge" id="badge-return" hidden></span>
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Market Return (S&amp;P 5Y)</span>
+          <span class="metric-value" id="m-market">—</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">CAPM Rate</span>
+          <span class="metric-value highlight" id="m-capm">—</span>
+        </div>
       </div>
     </section>
 
     <section class="panel error" id="error-panel" hidden></section>
+
   </main>
+
+  <p class="disclaimer">Results are estimates based on CAPM assumptions and historical data. Past performance does not guarantee future returns. Consult a licensed financial advisor before investing.</p>
 
   <script src="app.js"></script>
 </body>

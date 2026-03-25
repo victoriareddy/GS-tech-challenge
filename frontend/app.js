@@ -1,11 +1,13 @@
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = "http://localhost:3000/api";
 const FUNDS_CACHE_KEY = "mf_funds_cache_v1";
 
-const form = document.getElementById("calc-form");
-const fundSelect = document.getElementById("fund-select");
-const errorPanel = document.getElementById("error-panel");
+const form        = document.getElementById("calc-form");
+const fundSelect  = document.getElementById("fund-select");
+const errorPanel  = document.getElementById("error-panel");
 const resultPanel = document.getElementById("result-panel");
-const submitButton = form.querySelector('button[type="submit"]');
+const submitBtn   = form.querySelector('button[type="submit"]');
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function showError(message) {
   errorPanel.textContent = message;
@@ -29,128 +31,149 @@ function toMoney(value) {
   });
 }
 
+function setSubmitState(busy, label) {
+  submitBtn.disabled = busy;
+  submitBtn.textContent = label;
+}
+
+// ── Fund dropdown ─────────────────────────────────────────────────────────────
+
 function renderFunds(funds) {
   if (!Array.isArray(funds) || funds.length === 0) {
     throw new Error("No mutual funds available.");
   }
 
-  const previousSelection = fundSelect.value;
+  const prev = fundSelect.value;
   fundSelect.innerHTML = "";
 
-  funds.forEach((fund) => {
-    const option = document.createElement("option");
-    option.value = fund.ticker;
-    const categoryLabel = fund.category ? ` (${fund.category})` : "";
-    option.textContent = `${fund.ticker} - ${fund.name}${categoryLabel}`;
-    fundSelect.appendChild(option);
-  });
-
-  if (previousSelection) {
-    const hasPrevious = funds.some((fund) => fund.ticker === previousSelection);
-    if (hasPrevious) {
-      fundSelect.value = previousSelection;
-    }
+  // Group by category using <optgroup>
+  const categories = [...new Set(funds.map(f => f.category).filter(Boolean))];
+  if (categories.length > 0) {
+    categories.forEach(cat => {
+      const group = document.createElement("optgroup");
+      group.label = cat;
+      funds
+        .filter(f => f.category === cat)
+        .forEach(f => {
+          const opt = document.createElement("option");
+          opt.value = f.ticker;
+          opt.textContent = `${f.ticker} — ${f.name}`;
+          group.appendChild(opt);
+        });
+      fundSelect.appendChild(group);
+    });
+  } else {
+    funds.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.ticker;
+      opt.textContent = `${f.ticker} — ${f.name}`;
+      fundSelect.appendChild(opt);
+    });
   }
+
+  // Restore previous selection
+  if (prev && funds.some(f => f.ticker === prev)) fundSelect.value = prev;
 }
 
 function getCachedFunds() {
   try {
     const raw = localStorage.getItem(FUNDS_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function setCachedFunds(funds) {
-  try {
-    localStorage.setItem(FUNDS_CACHE_KEY, JSON.stringify(funds));
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function setSubmitState(isBusy, label) {
-  submitButton.disabled = isBusy;
-  submitButton.textContent = label;
+  try { localStorage.setItem(FUNDS_CACHE_KEY, JSON.stringify(funds)); } catch { /* ignore */ }
 }
 
 async function loadFunds() {
   clearError();
-  setSubmitState(true, "Loading funds...");
+  setSubmitState(true, "Loading funds…");
 
-  const cachedFunds = getCachedFunds();
-  if (cachedFunds && fundSelect.options.length === 0) {
-    try {
-      renderFunds(cachedFunds);
-      setSubmitState(false, "Calculate Future Value");
-    } catch {
-      // Ignore bad cached payload.
-    }
+  // Show cached funds immediately while fetch runs in background
+  const cached = getCachedFunds();
+  if (cached && fundSelect.options.length === 0) {
+    try { renderFunds(cached); setSubmitState(false, "Calculate Future Value →"); } catch { /* ignore */ }
   }
 
   try {
-    const response = await fetch(`${API_BASE}/funds`);
-    if (!response.ok) {
-      throw new Error("Failed to load supported funds and ETFs.");
-    }
-
-    const data = await response.json();
+    const res = await fetch(`${API_BASE}/funds`);
+    if (!res.ok) throw new Error("Failed to load supported funds and ETFs.");
+    const data = await res.json();
     renderFunds(data.funds);
     setCachedFunds(data.funds);
-    setSubmitState(false, "Calculate Future Value");
-  } catch (error) {
+    setSubmitState(false, "Calculate Future Value →");
+  } catch (err) {
     if (fundSelect.options.length === 0) {
       fundSelect.innerHTML = '<option value="">No funds available</option>';
-      setSubmitState(true, "Calculate Future Value");
+      setSubmitState(true, "Calculate Future Value →");
     } else {
-      setSubmitState(false, "Calculate Future Value");
+      setSubmitState(false, "Calculate Future Value →");
     }
-    showError((error.message || "Unable to load funds from backend.") + " Using cached values if available.");
+    showError(`${err.message || "Unable to load funds."} Make sure the server is running on port 3000.`);
   }
 }
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+// ── Form submit → CAPM calculation ───────────────────────────────────────────
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
   clearError();
 
-  const ticker = fundSelect.value;
+  const ticker    = fundSelect.value;
   const principal = document.getElementById("principal").value;
-  const years = document.getElementById("years").value;
+  const years     = document.getElementById("years").value;
+
+  if (!ticker) { showError("Please select a fund or ETF."); return; }
 
   try {
-    setSubmitState(true, "Calculating...");
+    setSubmitState(true, "Fetching live data & calculating…");
+
     const params = new URLSearchParams({ ticker, principal, years });
-    const response = await fetch(`${API_BASE}/investment/future-value?${params.toString()}`);
+    const res    = await fetch(`${API_BASE}/investment/future-value?${params}`);
+
     let data = {};
-    try {
-      data = await response.json();
-    } catch {
-      // Keep default object for non-JSON failures.
-    }
+    try { data = await res.json(); } catch { /* keep default */ }
+    if (!res.ok) throw new Error(data.error || "Calculation failed.");
 
-    if (!response.ok) {
-      throw new Error(data.error || "Calculation failed.");
-    }
-
+    // ── Populate result panel ──────────────────────────────────────────────
     resultPanel.hidden = false;
+
     document.getElementById("future-value").textContent = toMoney(data.futureValue);
-    document.getElementById("m-ticker").textContent = data.ticker;
-    document.getElementById("m-risk-free").textContent = toPercent(data.riskFreeRate);
-    document.getElementById("m-beta").textContent = Number(data.beta).toFixed(3);
-    document.getElementById("m-expected").textContent = toPercent(data.expectedReturnRate);
-    document.getElementById("m-market").textContent = toPercent(data.marketExpectedReturnRate);
-    document.getElementById("m-capm").textContent = toPercent(data.capmRate);
-  } catch (error) {
+    document.getElementById("m-ticker").textContent     = data.ticker;
+    document.getElementById("m-risk-free").textContent  = toPercent(data.riskFreeRate);
+    document.getElementById("m-beta").textContent       = Number(data.beta).toFixed(3);
+    document.getElementById("m-expected").textContent   = toPercent(data.expectedReturnRate);
+    document.getElementById("m-market").textContent     = toPercent(data.marketExpectedReturnRate);
+    document.getElementById("m-capm").textContent       = toPercent(data.capmRate);
+
+    // Show data source badges if the server returned them
+    if (data.sources) {
+      setSourceBadge("badge-beta",   data.sources.beta);
+      setSourceBadge("badge-return", data.sources.expectedReturn);
+      setSourceBadge("badge-rf",     data.sources.riskFreeRate);
+    }
+
+    resultPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  } catch (err) {
     resultPanel.hidden = true;
-    showError(error.message || "Something went wrong while calculating.");
+    showError(err.message || "Something went wrong while calculating.");
   } finally {
-    setSubmitState(false, "Calculate Future Value");
+    setSubmitState(false, "Calculate Future Value →");
   }
 });
+
+function setSourceBadge(id, text) {
+  const el = document.getElementById(id);
+  if (!el || !text) return;
+  const isLive = text.toLowerCase().includes("live") || text.toLowerCase().includes("newton") || text.toLowerCase().includes("yahoo");
+  el.textContent = isLive ? "⚡ Live" : "📦 Cached";
+  el.className   = "source-badge " + (isLive ? "live" : "cached");
+  el.title       = text;
+  el.hidden      = false;
+}
 
 loadFunds();
