@@ -311,6 +311,14 @@
     }
 
     .metric-label { color: var(--muted); font-weight: 500; }
+    .metric-label .source-link {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+    .metric-label .source-link:hover {
+      color: #93c5fd;
+      text-decoration: underline;
+    }
     .metric-value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
     .metric-value.highlight { color: var(--accent2); }
     .metric-value.gold      { color: var(--gold); }
@@ -412,28 +420,28 @@
           <span class="metric-value highlight" id="m-ticker">—</span>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Risk-free Rate <small style="color:var(--muted);font-weight:400">(FRED DGS10)</small></span>
+          <span class="metric-label">Risk-free Rate <small style="color:var(--muted);font-weight:400">(<a class="source-link" href="https://fred.stlouisfed.org/series/DGS10" target="_blank" rel="noopener noreferrer">FRED DGS10</a>)</small></span>
           <div class="metric-right">
             <span class="metric-value" id="m-risk-free">—</span>
             <span class="source-badge cached" id="badge-rf" hidden title="">📦 Hardcoded</span>
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Beta <small style="color:var(--muted);font-weight:400">(Newton Analytics)</small></span>
+          <span class="metric-label">Beta <small style="color:var(--muted);font-weight:400">(<a class="source-link" href="https://www.newtonanalytics.com/docs/api/stockbeta.php" target="_blank" rel="noopener noreferrer">Newton Analytics</a>)</small></span>
           <div class="metric-right">
             <span class="metric-value" id="m-beta">—</span>
             <span class="source-badge" id="badge-beta" hidden></span>
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Fund Return (1Y avg) <small style="color:var(--muted);font-weight:400">(Yahoo Finance)</small></span>
+          <span class="metric-label">Fund Return (1Y avg) <small style="color:var(--muted);font-weight:400">(<a class="source-link" href="https://query1.finance.yahoo.com/v8/finance/chart/VFIAX?range=1y&interval=1mo&events=history" target="_blank" rel="noopener noreferrer">Yahoo Finance</a>)</small></span>
           <div class="metric-right">
             <span class="metric-value gold" id="m-expected">—</span>
             <span class="source-badge" id="badge-return" hidden></span>
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Market Return (S&amp;P 5Y)</span>
+          <span class="metric-label">Market Return (S&amp;P 5Y) <small style="color:var(--muted);font-weight:400">(<a class="source-link" href="https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1mo&events=history" target="_blank" rel="noopener noreferrer">Yahoo S&amp;P API</a>)</small></span>
           <span class="metric-value" id="m-market">—</span>
         </div>
         <div class="metric-row">

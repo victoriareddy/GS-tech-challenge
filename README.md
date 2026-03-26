@@ -24,10 +24,10 @@ Base URL: `http://localhost:8080`
 
 Where:
 
-- `riskFreeRate` comes from the latest available FRED `DGS10` value (10-year Treasury, converted from percent to decimal), with a fallback default of `0.043` if FRED is temporarily unavailable
-- `beta` comes from Newton Analytics stock beta API
-- `expectedReturnRate` is the selected fund's 1-year average annualized return, computed from Yahoo Finance monthly close data
-- `marketExpectedReturnRate` is the S&P 500 (`^GSPC`) 5-year average annualized return, computed from monthly close data
+- `riskFreeRate` comes from the latest available [FRED `DGS10` series](https://fred.stlouisfed.org/series/DGS10) value (10-year Treasury, converted from percent to decimal), with a fallback default of `0.043` if FRED is temporarily unavailable
+- `beta` comes from the [Newton Analytics stock beta API](https://www.newtonanalytics.com/docs/api/stockbeta.php)
+- `expectedReturnRate` is the selected fund's 1-year average annualized return, computed from [Yahoo Finance chart API (example)](https://query1.finance.yahoo.com/v8/finance/chart/VFIAX?range=1y&interval=1mo&events=history) monthly close data
+- `marketExpectedReturnRate` is the S&P 500 (`^GSPC`) 5-year average annualized return, computed from [Yahoo Finance S&P 500 chart API](https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1mo&events=history) monthly close data
 
 ## Project structure
 
