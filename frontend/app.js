@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:8080/api`;
 const FUNDS_CACHE_KEY = "mf_funds_cache_v1";
 
 const form        = document.getElementById("calc-form");
@@ -112,7 +112,7 @@ async function loadFunds() {
     } else {
       setSubmitState(false, "Calculate Future Value →");
     }
-    showError(`${err.message || "Unable to load funds."} Make sure the server is running on port 3000.`);
+    showError(`${err.message || "Unable to load funds."} Make sure the server is running on port 8080.`);
   }
 }
 
