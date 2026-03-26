@@ -59,6 +59,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      text-decoration: none;
     }
 
     .logo-icon {
@@ -80,6 +81,40 @@
     }
 
     .logo-text span { color: var(--gold); }
+
+    .logo:hover .logo-text {
+      color: var(--accent2);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .home-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent2);
+      text-decoration: none;
+      border: 1px solid rgba(59,130,246,0.35);
+      background: rgba(59,130,246,0.08);
+      padding: 6px 12px;
+      border-radius: 999px;
+      transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    }
+
+    .home-btn:hover {
+      background: rgba(59,130,246,0.18);
+      border-color: rgba(59,130,246,0.55);
+    }
+
+    .home-btn:active {
+      transform: scale(0.98);
+    }
 
     .header-badge {
       font-size: 0.72rem;
@@ -341,11 +376,14 @@
 
   <!-- Header -->
   <header>
-    <div class="logo">
+    <a href="index.html" class="logo" aria-label="Go to home">
       <div class="logo-icon">📈</div>
       <div class="logo-text">Team <span>7</span></div>
+    </a>
+    <div class="header-actions">
+      <a href="index.html" class="home-btn" aria-label="Go to home">← Home</a>
+      <div class="header-badge">AI Finance Advisor</div>
     </div>
-    <div class="header-badge">AI Finance Advisor</div>
   </header>
 
   <!-- Suggestion chips -->
