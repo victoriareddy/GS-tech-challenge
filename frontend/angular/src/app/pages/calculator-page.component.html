@@ -1,0 +1,108 @@
+<header>
+  <a routerLink="/" class="logo">
+    <div class="logo-icon">📈</div>
+    <div class="logo-text">Team <span>7</span></div>
+  </a>
+  <a routerLink="/chat" class="chat-cta">
+    <div class="pulse"></div>
+    Ask AI Advisor
+  </a>
+</header>
+
+<div class="hero">
+  <div class="hero-label">CAPM Calculator</div>
+  <h1>Project your <em>future wealth</em><br />with precision</h1>
+  <p>Estimate future value using the Capital Asset Pricing Model, with full ETF support included.</p>
+</div>
+
+<main class="layout">
+  <section class="panel">
+    <h2><span class="icon">🧮</span> Calculator</h2>
+    <form class="form" (ngSubmit)="submit()">
+      <label for="fund-select">Fund or ETF</label>
+      <select id="fund-select" [(ngModel)]="selectedTicker" name="ticker" required>
+        @if (groupedFunds.length > 0) {
+          @for (group of groupedFunds; track group.category) {
+            <optgroup [label]="group.category">
+              @for (fund of group.funds; track fund.ticker) {
+                <option [value]="fund.ticker">{{ fund.ticker }} — {{ fund.name }}</option>
+              }
+            </optgroup>
+          }
+        } @else {
+          @for (fund of funds; track fund.ticker) {
+            <option [value]="fund.ticker">{{ fund.ticker }} — {{ fund.name }}</option>
+          }
+        }
+      </select>
+
+      <label for="principal">Initial Investment ($)</label>
+      <input id="principal" type="number" min="1" step="0.01" placeholder="10000" [(ngModel)]="principal" name="principal" required />
+
+      <label for="years">Time Horizon (years)</label>
+      <input id="years" type="number" min="0.1" step="0.1" placeholder="5" [(ngModel)]="years" name="years" required />
+
+      <button type="submit" [disabled]="submitBusy">{{ submitLabel }}</button>
+    </form>
+  </section>
+
+  @if (result) {
+    <section class="panel" #resultPanel>
+      <h2><span class="icon">📊</span> Projection</h2>
+      <div class="future-value-display">
+        <div class="future-value-label">Estimated Future Value</div>
+        <div class="big">{{ toMoney(result.futureValue) }}</div>
+      </div>
+      <div class="metrics">
+        <div class="metric-row">
+          <span class="metric-label">Ticker</span>
+          <span class="metric-value highlight">{{ result.ticker }}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Risk-free Rate</span>
+          <div class="metric-right">
+            <span class="metric-value">{{ toPercent(result.riskFreeRate) }}</span>
+            @if (riskFreeBadge) {
+              <span class="source-badge" [class.live]="riskFreeBadge.kind === 'live'" [class.cached]="riskFreeBadge.kind === 'cached'" [title]="riskFreeBadge.title">{{ riskFreeBadge.label }}</span>
+            }
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Beta</span>
+          <div class="metric-right">
+            <span class="metric-value">{{ result.beta.toFixed(3) }}</span>
+            @if (betaBadge) {
+              <span class="source-badge" [class.live]="betaBadge.kind === 'live'" [class.cached]="betaBadge.kind === 'cached'" [title]="betaBadge.title">{{ betaBadge.label }}</span>
+            }
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Fund Return (1Y avg)</span>
+          <div class="metric-right">
+            <span class="metric-value gold">{{ toPercent(result.expectedReturnRate) }}</span>
+            @if (returnBadge) {
+              <span class="source-badge" [class.live]="returnBadge.kind === 'live'" [class.cached]="returnBadge.kind === 'cached'" [title]="returnBadge.title">{{ returnBadge.label }}</span>
+            }
+          </div>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Market Return (S&amp;P 5Y)</span>
+          <span class="metric-value">{{ toPercent(result.marketExpectedReturnRate) }}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">CAPM Rate</span>
+          <span class="metric-value highlight">{{ toPercent(result.capmRate) }}</span>
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (errorMessage) {
+    <section class="panel error">{{ errorMessage }}</section>
+  }
+</main>
+
+<p class="disclaimer">
+  Results are estimates based on CAPM assumptions and historical data. Past performance does not guarantee future returns.
+  Consult a licensed financial advisor before investing.
+</p>
