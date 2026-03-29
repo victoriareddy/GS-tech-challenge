@@ -37,10 +37,30 @@
       </select>
 
       <label for="principal">Initial Investment ($)</label>
-      <input id="principal" type="number" min="1" step="0.01" placeholder="10000" [(ngModel)]="principal" name="principal" required />
+      <input
+        id="principal"
+        type="number"
+        [min]="minPrincipal"
+        [max]="maxPrincipal"
+        step="0.01"
+        placeholder="10000"
+        [(ngModel)]="principal"
+        name="principal"
+        required
+      />
 
       <label for="years">Time Horizon (years)</label>
-      <input id="years" type="number" min="0.1" step="0.1" placeholder="5" [(ngModel)]="years" name="years" required />
+      <input
+        id="years"
+        type="number"
+        [min]="minYears"
+        [max]="maxYears"
+        step="0.1"
+        placeholder="5"
+        [(ngModel)]="years"
+        name="years"
+        required
+      />
 
       <button type="submit" [disabled]="submitBusy">{{ submitLabel }}</button>
     </form>
@@ -51,7 +71,7 @@
       <h2><span class="icon">📊</span> Projection</h2>
       <div class="future-value-display">
         <div class="future-value-label">Estimated Future Value</div>
-        <div class="big">{{ toMoney(result.futureValue) }}</div>
+        <div class="big">{{ formatFutureValue(result.futureValue) }}</div>
       </div>
       <div class="metrics">
         <div class="metric-row">

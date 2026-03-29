@@ -3,8 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
+ANGULAR_DIR="${ROOT_DIR}/frontend/angular"
 FRONTEND_PORT="${FRONTEND_PORT:-5500}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
+FRONTEND_MODE="${FRONTEND_MODE:-auto}" # auto | angular | static
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -59,9 +61,32 @@ if ! kill -0 "${BACKEND_PID}" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Starting frontend static server on http://localhost:${FRONTEND_PORT} ..."
-echo "Open: http://localhost:${FRONTEND_PORT}/frontend/index.html"
-echo "Press Ctrl+C to stop everything."
+if [[ "${FRONTEND_MODE}" == "auto" ]]; then
+  if [[ -f "${ANGULAR_DIR}/package.json" ]]; then
+    FRONTEND_MODE="angular"
+  else
+    FRONTEND_MODE="static"
+  fi
+fi
 
-cd "${ROOT_DIR}"
-python3 -m http.server "${FRONTEND_PORT}"
+if [[ "${FRONTEND_MODE}" == "angular" ]]; then
+  require_command npm
+  if [[ ! -x "${ANGULAR_DIR}/node_modules/.bin/ng" ]]; then
+    echo "Angular dependencies missing. Installing in ${ANGULAR_DIR} ..."
+    npm --prefix "${ANGULAR_DIR}" install
+  fi
+  echo "Starting Angular frontend on http://localhost:${FRONTEND_PORT} ..."
+  echo "Open: http://localhost:${FRONTEND_PORT}/"
+  echo "Press Ctrl+C to stop everything."
+  if [[ "${FRONTEND_PORT}" == "5500" ]]; then
+    npm --prefix "${ANGULAR_DIR}" run start
+  else
+    npm --prefix "${ANGULAR_DIR}" run start -- --port "${FRONTEND_PORT}"
+  fi
+else
+  echo "Starting static frontend server on http://localhost:${FRONTEND_PORT} ..."
+  echo "Open: http://localhost:${FRONTEND_PORT}/frontend/index.html"
+  echo "Press Ctrl+C to stop everything."
+  cd "${ROOT_DIR}"
+  python3 -m http.server "${FRONTEND_PORT}"
+fi

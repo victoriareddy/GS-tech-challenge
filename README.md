@@ -32,9 +32,10 @@ Where:
 ## Project structure
 
 - `backend/src/MutualFundCalculatorServer.java`
-- `frontend/index.html`
-- `frontend/styles.css`
-- `frontend/app.js`
+- `frontend/angular/src/app/app.ts`
+- `frontend/angular/src/app/app.html`
+- `frontend/angular/src/app/app.css`
+- `frontend/server.js` (Node chat/service backend on port `3000`)
 
 ## Run instructions
 
@@ -46,11 +47,11 @@ Where:
 
 This starts:
 - Backend on `http://localhost:8080`
-- Frontend static server on `http://localhost:5500`
+- Angular frontend dev server on `http://localhost:5500` (auto-installs frontend deps if missing)
 
 ### 2) Open frontend
 
-- `http://localhost:5500/frontend/index.html`
+- `http://localhost:5500/`
 
 ### 3) Stop everything
 

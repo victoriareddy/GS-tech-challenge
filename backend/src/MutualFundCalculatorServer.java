@@ -28,6 +28,10 @@ import java.util.regex.Pattern;
 public class MutualFundCalculatorServer {
     private static final int PORT = 8080;
     private static final double DEFAULT_RISK_FREE_RATE = 0.043; // Fallback if FRED is unavailable.
+    private static final double MIN_PRINCIPAL = 1.0;
+    private static final double MAX_PRINCIPAL = 1_000_000_000.0;
+    private static final double MIN_YEARS = 0.1;
+    private static final double MAX_YEARS = 100.0;
     private static final String FRED_API_KEY = System.getenv("FRED_API_KEY");
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 5000;
@@ -147,8 +151,20 @@ public class MutualFundCalculatorServer {
                 return;
             }
 
-            if (principal <= 0 || years <= 0) {
-                sendError(exchange, 400, "principal and years must be greater than zero.");
+            if (!Double.isFinite(principal) || !Double.isFinite(years)) {
+                sendError(exchange, 400, "principal and years must be finite numeric values.");
+                return;
+            }
+
+            if (principal < MIN_PRINCIPAL || principal > MAX_PRINCIPAL) {
+                sendError(exchange, 400, "principal must be between " + round(MIN_PRINCIPAL, 0) +
+                    " and " + round(MAX_PRINCIPAL, 0) + ".");
+                return;
+            }
+
+            if (years < MIN_YEARS || years > MAX_YEARS) {
+                sendError(exchange, 400, "years must be between " + round(MIN_YEARS, 1) +
+                    " and " + round(MAX_YEARS, 0) + ".");
                 return;
             }
 
@@ -158,7 +174,16 @@ public class MutualFundCalculatorServer {
                 double marketExpectedReturnRate = fetchExpectedAnnualMarketReturnFromYahooSp500();
                 double expectedReturnRate = fetchExpectedAnnualFundReturnFromYahoo(ticker);
                 double capmRate = riskFreeRate + beta * (marketExpectedReturnRate - riskFreeRate);
+                if (!Double.isFinite(capmRate) || capmRate <= -1.0) {
+                    sendError(exchange, 502, "Market data produced an invalid CAPM rate.");
+                    return;
+                }
                 double futureValue = principal * Math.pow(1.0 + capmRate, years);
+                if (!Double.isFinite(futureValue) || futureValue <= 0.0) {
+                    sendError(exchange, 400, "Projected future value is outside supported range. " +
+                        "Try a smaller principal or shorter time horizon.");
+                    return;
+                }
 
                 StringBuilder body = new StringBuilder();
                 body.append("{")
@@ -656,7 +681,7 @@ public class MutualFundCalculatorServer {
     }
 
     private static String round(double value, int decimals) {
-        BigDecimal bd = new BigDecimal(value).setScale(decimals, RoundingMode.HALF_UP);
+        BigDecimal bd = BigDecimal.valueOf(value).setScale(decimals, RoundingMode.HALF_UP);
         return bd.stripTrailingZeros().toPlainString();
     }
 

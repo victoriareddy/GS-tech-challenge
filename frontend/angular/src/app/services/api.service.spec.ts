@@ -69,4 +69,11 @@ describe('ApiService', () => {
     const data = await p;
     expect(data.reply).toBe('hi');
   });
+
+  it('getFutureValue should surface backend error message', async () => {
+    const p = service.getFutureValue('VOO', 10000, 1000);
+    const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.includes('/api/investment/future-value'));
+    req.flush({ error: 'years must be between 0.1 and 100.' }, { status: 400, statusText: 'Bad Request' });
+    await expect(p).rejects.toThrow('years must be between 0.1 and 100.');
+  });
 });

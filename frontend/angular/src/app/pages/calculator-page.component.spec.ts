@@ -74,6 +74,24 @@ describe('CalculatorPageComponent', () => {
     expect(getFutureValue).not.toHaveBeenCalled();
   });
 
+  it('should reject principal above max range', async () => {
+    component.selectedTicker = 'SPY';
+    component.principal = component.maxPrincipal + 1;
+    component.years = 5;
+    await component.submit();
+    expect(component.errorMessage).toContain('Initial investment must be between');
+    expect(getFutureValue).not.toHaveBeenCalled();
+  });
+
+  it('should reject years above max range', async () => {
+    component.selectedTicker = 'SPY';
+    component.principal = 10000;
+    component.years = component.maxYears + 1;
+    await component.submit();
+    expect(component.errorMessage).toContain('Time horizon must be between');
+    expect(getFutureValue).not.toHaveBeenCalled();
+  });
+
   it('should call getFutureValue and set result on success', async () => {
     component.selectedTicker = 'SPY';
     component.principal = 10000;
@@ -93,5 +111,9 @@ describe('CalculatorPageComponent', () => {
     const s = component.toMoney(16105.1);
     expect(s).toContain('16');
     expect(s).toContain('105');
+  });
+
+  it('formatFutureValue should switch to scientific format for large values', () => {
+    expect(component.formatFutureValue(7.5e18)).toContain('e+');
   });
 });

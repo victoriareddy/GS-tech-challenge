@@ -28,6 +28,10 @@ export class CalculatorPageComponent implements OnInit {
     { ticker: 'VTI', name: 'Vanguard Total Stock Market ETF', category: 'ETF' },
     { ticker: 'IVV', name: 'iShares Core S&P 500 ETF', category: 'ETF' }
   ];
+  readonly minPrincipal = 1;
+  readonly maxPrincipal = 1_000_000_000;
+  readonly minYears = 0.1;
+  readonly maxYears = 100;
 
   selectedTicker = '';
   principal?: number;
@@ -95,8 +99,9 @@ export class CalculatorPageComponent implements OnInit {
       return;
     }
 
-    if (!this.principal || !this.years) {
-      this.showError('Please enter principal and years.');
+    const validationError = this.validateInputs();
+    if (validationError) {
+      this.showError(validationError);
       return;
     }
 
@@ -104,7 +109,10 @@ export class CalculatorPageComponent implements OnInit {
       this.setSubmitState(true, 'Fetching live data & calculating...');
       this.cdr.detectChanges();
 
-      this.result = await this.apiService.getFutureValue(this.selectedTicker, this.principal, this.years);
+      this.result = await this.apiService.getFutureValue(this.selectedTicker, this.principal!, this.years!);
+      if (!Number.isFinite(this.result.futureValue)) {
+        throw new Error('Projected value exceeded supported range. Use a smaller amount or shorter horizon.');
+      }
       this.betaBadge = this.toSourceBadge(this.result.sources?.beta);
       this.returnBadge = this.toSourceBadge(this.result.sources?.expectedReturn);
       this.riskFreeBadge = this.toSourceBadge(this.result.sources?.riskFreeRate);
@@ -132,11 +140,24 @@ export class CalculatorPageComponent implements OnInit {
   }
 
   toMoney(value: number): string {
+    if (!Number.isFinite(value)) {
+      return 'N/A';
+    }
     return Number(value).toLocaleString('en-US', {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 2
     });
+  }
+
+  formatFutureValue(value: number): string {
+    if (!Number.isFinite(value) || value <= 0) {
+      return 'Value out of range';
+    }
+    if (Math.abs(value) >= 1e15) {
+      return `$${value.toExponential(2)}`;
+    }
+    return this.toMoney(value);
   }
 
   private renderFunds(funds: Fund[]): void {
@@ -218,5 +239,21 @@ export class CalculatorPageComponent implements OnInit {
 
   private clearError(): void {
     this.errorMessage = '';
+  }
+
+  private validateInputs(): string | null {
+    if (this.principal == null || this.years == null) {
+      return 'Please enter principal and years.';
+    }
+    if (!Number.isFinite(this.principal) || !Number.isFinite(this.years)) {
+      return 'Principal and years must be valid numbers.';
+    }
+    if (this.principal < this.minPrincipal || this.principal > this.maxPrincipal) {
+      return `Initial investment must be between $${this.minPrincipal.toLocaleString('en-US')} and $${this.maxPrincipal.toLocaleString('en-US')}.`;
+    }
+    if (this.years < this.minYears || this.years > this.maxYears) {
+      return `Time horizon must be between ${this.minYears} and ${this.maxYears} years.`;
+    }
+    return null;
   }
 }
