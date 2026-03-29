@@ -111,7 +111,10 @@ export class CalculatorPageComponent implements OnInit {
       // Async/await can resume outside a tick that schedules CD; blur on <select> masked that.
       this.cdr.detectChanges();
       queueMicrotask(() => {
-        this.resultPanel?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const el = this.resultPanel?.nativeElement;
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Something went wrong while calculating.';
