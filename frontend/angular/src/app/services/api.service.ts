@@ -14,14 +14,16 @@ export interface FundsResponse {
 
 export interface FutureValueResponse {
   ticker: string;
+  name?: string;
+  category?: string;
+  principal: number;
+  years: number;
   riskFreeRate: number;
   beta: number;
   expectedReturnRate: number;
   marketExpectedReturnRate: number;
   capmRate: number;
   futureValue: number;
-  principal: number;
-  years: number;
   sources?: {
     beta?: string;
     expectedReturn?: string;
@@ -38,11 +40,31 @@ export interface ChatResponse {
   reply: string;
 }
 
+// Mirrors FutureValueResponse — sent to /api/chat so Gemini can reference
+// the user's actual calculation when answering questions.
+export interface CalculatorContext {
+  ticker: string;
+  name?: string;
+  category?: string;
+  principal: number;
+  years: number;
+  riskFreeRate: number;
+  beta: number;
+  expectedReturnRate: number;
+  marketExpectedReturnRate: number;
+  capmRate: number;
+  futureValue: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   // Calculator + chat endpoints all live on the Node/Express server (port 3000).
   // Change this one line if you move the backend to a different port.
   private readonly calculatorApiBase = `${window.location.protocol}//${window.location.hostname}:3000/api`;
+
+  // Stores the last CAPM result so chat-page can send it as context to Gemini.
+  // Set by calculator-page after a successful calculation.
+  lastCalculatorResult: CalculatorContext | null = null;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -81,9 +103,12 @@ export class ApiService {
   }
 
   /** POST /api/chat — goes through Angular proxy to avoid CORS */
-  sendChat(messages: ChatMessage[]): Promise<ChatResponse> {
+  sendChat(messages: ChatMessage[], calculatorContext?: CalculatorContext): Promise<ChatResponse> {
     return firstValueFrom(
-      this.http.post<ChatResponse>(`${this.calculatorApiBase}/chat`, { messages })
+      this.http.post<ChatResponse>(`${this.calculatorApiBase}/chat`, {
+        messages,
+        ...(calculatorContext ? { calculatorContext } : {}),
+      })
     );
   }
 

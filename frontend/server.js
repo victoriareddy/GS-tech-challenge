@@ -7,17 +7,12 @@
  * Endpoints:
  *   GET  /api/funds                          → list of hardcoded mutual funds/ETFs
  *   GET  /api/investment/future-value        → CAPM future value calculation
- *   POST /api/chat                           → Gemini AI advisor
+ *   POST /api/chat                           → Gemini AI advisor (context-aware)
  *   GET  /api/health                         → health check
  *
  * CAPM formula (per spec):
  *   r = riskFreeRate + beta × (expectedReturnRate − riskFreeRate)
  *   FV = principal × (1 + r)^years
- *
- *   • riskFreeRate      → hardcoded US 10-yr Treasury rate (per spec)
- *   • beta              → live from Newton Analytics API (per spec)
- *   • expectedReturnRate→ live 1-year avg return from Yahoo Finance (per spec)
- *   • marketReturn      → S&P 500 5-year historical avg (per spec)
  *
  * Setup:
  *   1. npm install express cors dotenv @google/generative-ai node-fetch
@@ -30,13 +25,10 @@ const cors     = require('cors');
 const path     = require('path');
 require('dotenv').config();
 
-// node-fetch v2 is CommonJS-compatible; v3+ is ESM only.
-// We use dynamic import to support both environments.
 let _fetch;
 async function getFetch() {
   if (_fetch) return _fetch;
   try {
-    // Try native fetch first (Node 18+)
     if (typeof fetch !== 'undefined') { _fetch = fetch; return _fetch; }
     _fetch = (await import('node-fetch')).default;
   } catch {
@@ -61,23 +53,14 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ── CAPM Constants ─────────────────────────────────────────────────────────────
-// Risk-free rate: hardcoded per spec (US 10-yr Treasury)
-// Source: https://fred.stlouisfed.org/series/DGS10
-const RISK_FREE_RATE = 0.0425; // 4.25% — update periodically
+const RISK_FREE_RATE         = 0.0425; // ~US 10-yr Treasury (FRED DGS10)
+const MARKET_EXPECTED_RETURN = 0.1050; // S&P 500 5-year historical avg
 
-// S&P 500 5-year historical average annual return (per spec)
-const MARKET_EXPECTED_RETURN = 0.1050; // ~10.5%
-
-// Newton Analytics API base (per spec)
 const NEWTON_BASE = 'https://api.newtonanalytics.com';
+const YAHOO_BASE  = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
-// Yahoo Finance base for historical prices
-const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
-
-// ── Hardcoded Fund List (per spec) ─────────────────────────────────────────────
-// Beta and expectedReturnRate are fetched live; these are fallback values only.
+// ── Hardcoded Fund List ────────────────────────────────────────────────────────
 const FUNDS = [
-  // Top Mutual Funds (from spec reference: marketwatch top-25)
   { ticker: 'VFIAX', name: 'Vanguard 500 Index Fund Admiral',          category: 'Broad Market'  },
   { ticker: 'FXAIX', name: 'Fidelity 500 Index Fund',                  category: 'Broad Market'  },
   { ticker: 'VTSAX', name: 'Vanguard Total Stock Market Index Admiral', category: 'Broad Market'  },
@@ -98,7 +81,6 @@ const FUNDS = [
   { ticker: 'VWINX', name: 'Vanguard Wellesley Income Fund Admiral',    category: 'Balanced'      },
   { ticker: 'VBTLX', name: 'Vanguard Total Bond Market Index Admiral',  category: 'Bond'          },
   { ticker: 'PTTRX', name: 'PIMCO Total Return Fund Institutional',     category: 'Bond'          },
-  // ETFs (bonus scope per spec)
   { ticker: 'VOO',   name: 'Vanguard S&P 500 ETF',                      category: 'ETF'           },
   { ticker: 'SPY',   name: 'SPDR S&P 500 ETF Trust',                    category: 'ETF'           },
   { ticker: 'QQQ',   name: 'Invesco QQQ Trust (Nasdaq-100)',             category: 'ETF'           },
@@ -108,52 +90,35 @@ const FUNDS = [
 
 // ── Live Data Helpers ──────────────────────────────────────────────────────────
 
-/**
- * Fetch live beta from Newton Analytics (per spec).
- * GET https://api.newtonanalytics.com/stock-beta/?ticker=VFIAX&index=^GSPC&interval=1mo&observations=12
- */
 async function fetchBeta(ticker) {
   const fetch = await getFetch();
   const url = `${NEWTON_BASE}/stock-beta/?ticker=${encodeURIComponent(ticker)}&index=%5EGSPC&interval=1mo&observations=12`;
   const res = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Newton API returned ${res.status} for ${ticker}`);
   const data = await res.json();
-  // Newton returns { data: "1.23" } or { data: 1.23 }
   const beta = parseFloat(data?.data ?? data?.beta ?? data);
   if (isNaN(beta)) throw new Error(`Could not parse beta from Newton response: ${JSON.stringify(data)}`);
   return beta;
 }
 
-/**
- * Fetch 1-year average daily return from Yahoo Finance and annualise it.
- * Uses the past 252 trading days of closing prices.
- */
 async function fetchExpectedReturn(ticker) {
-  const fetch = await getFetch();
+  const fetch    = await getFetch();
   const now      = Math.floor(Date.now() / 1000);
   const oneYrAgo = now - 365 * 24 * 3600;
-  const url = `${YAHOO_BASE}/${encodeURIComponent(ticker)}?period1=${oneYrAgo}&period2=${now}&interval=1d&events=history`;
-
-  const res = await fetch(url, {
+  const url      = `${YAHOO_BASE}/${encodeURIComponent(ticker)}?period1=${oneYrAgo}&period2=${now}&interval=1d&events=history`;
+  const res      = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Yahoo Finance returned ${res.status} for ${ticker}`);
-
-  const json = await res.json();
+  const json   = await res.json();
   const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
   if (!Array.isArray(closes) || closes.length < 2) throw new Error(`Insufficient price history for ${ticker}`);
-
-  // Filter out nulls
   const prices = closes.filter(p => p != null && !isNaN(p));
   if (prices.length < 2) throw new Error(`Not enough valid prices for ${ticker}`);
-
-  // Total return over the period: (last - first) / first
-  const totalReturn = (prices[prices.length - 1] - prices[0]) / prices[0];
-  return totalReturn; // Already ~1-year return per spec
+  return (prices[prices.length - 1] - prices[0]) / prices[0];
 }
 
-// ── Fallback beta/return values (used if live APIs fail) ──────────────────────
 const FALLBACK = {
   VFIAX: { beta: 1.00, expectedReturnRate: 0.132 },
   FXAIX: { beta: 1.00, expectedReturnRate: 0.132 },
@@ -194,7 +159,6 @@ app.get('/api/funds', (_req, res) => {
 });
 
 // ── GET /api/investment/future-value ──────────────────────────────────────────
-// Query params: ticker, principal, years
 app.get('/api/investment/future-value', async (req, res) => {
   const { ticker, principal, years } = req.query;
 
@@ -202,7 +166,7 @@ app.get('/api/investment/future-value', async (req, res) => {
     return res.status(400).json({ error: 'ticker, principal, and years are required query parameters.' });
   }
 
-  const t = ticker.toUpperCase();
+  const t    = ticker.toUpperCase();
   const fund = FUNDS.find(f => f.ticker === t);
   if (!fund) {
     return res.status(404).json({ error: `Fund "${ticker}" not found. Call /api/funds for the list.` });
@@ -213,64 +177,56 @@ app.get('/api/investment/future-value', async (req, res) => {
   if (isNaN(p) || p <= 0) return res.status(400).json({ error: 'principal must be a positive number.' });
   if (isNaN(y) || y <= 0) return res.status(400).json({ error: 'years must be a positive number.' });
 
-  // Fetch live data, fall back gracefully
   const fallback = FALLBACK[t] ?? { beta: 1.0, expectedReturnRate: 0.10 };
   let beta, expectedReturnRate, betaSource, returnSource;
 
-  // --- Fetch beta (Newton Analytics, per spec) ---
   try {
-    beta = await fetchBeta(t);
+    beta       = await fetchBeta(t);
     betaSource = 'Newton Analytics API (live)';
     console.log(`  ✅ Beta for ${t}: ${beta} [Newton live]`);
   } catch (err) {
     console.warn(`  ⚠️  Newton beta fetch failed for ${t}: ${err.message} — using fallback`);
-    beta = fallback.beta;
+    beta       = fallback.beta;
     betaSource = 'fallback (Newton API unavailable)';
   }
 
-  // --- Fetch expected return (Yahoo Finance, per spec) ---
   try {
     expectedReturnRate = await fetchExpectedReturn(t);
-    returnSource = 'Yahoo Finance (live 1-year)';
+    returnSource       = 'Yahoo Finance (live 1-year)';
     console.log(`  ✅ Expected return for ${t}: ${(expectedReturnRate * 100).toFixed(2)}% [Yahoo live]`);
   } catch (err) {
     console.warn(`  ⚠️  Yahoo return fetch failed for ${t}: ${err.message} — using fallback`);
     expectedReturnRate = fallback.expectedReturnRate;
-    returnSource = 'fallback (Yahoo Finance unavailable)';
+    returnSource       = 'fallback (Yahoo Finance unavailable)';
   }
 
-  // CAPM: r = Rf + β × (Rm − Rf)   (exact spec formula)
-  const capmRate  = RISK_FREE_RATE + beta * (MARKET_EXPECTED_RETURN - RISK_FREE_RATE);
-
-  // FV = P × (1 + r)^t
+  const capmRate    = RISK_FREE_RATE + beta * (MARKET_EXPECTED_RETURN - RISK_FREE_RATE);
   const futureValue = p * Math.pow(1 + capmRate, y);
 
   return res.json({
     ticker,
     name:                     fund.name,
     category:                 fund.category,
-    // CAPM inputs
     riskFreeRate:             RISK_FREE_RATE,
     beta,
     expectedReturnRate,
     marketExpectedReturnRate: MARKET_EXPECTED_RETURN,
     capmRate,
-    // Result
     principal:                p,
     years:                    y,
     futureValue,
-    // Data provenance (helpful for debugging / presentation)
     sources: {
-      riskFreeRate:      'Hardcoded — US 10-yr Treasury (FRED DGS10)',
-      beta:              betaSource,
-      expectedReturn:    returnSource,
-      marketReturn:      'Hardcoded — S&P 500 5-year historical avg',
+      riskFreeRate:   'Hardcoded — US 10-yr Treasury (FRED DGS10)',
+      beta:           betaSource,
+      expectedReturn: returnSource,
+      marketReturn:   'Hardcoded — S&P 500 5-year historical avg',
     },
   });
 });
 
-// ── POST /api/chat (Gemini AI Advisor) ────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an expert AI financial advisor specializing in mutual funds and personal finance. You have deep knowledge of:
+// ── System prompt helpers ──────────────────────────────────────────────────────
+
+const BASE_SYSTEM_PROMPT = `You are an expert AI financial advisor specializing in mutual funds and personal finance. You have deep knowledge of:
 
 • Mutual fund types: equity, debt, hybrid, index, sectoral, thematic, ELSS, liquid, overnight, and international funds
 • Key concepts: NAV, AUM, expense ratio, exit load, SIP, SWP, STP, CAGR, alpha, beta, Sharpe ratio, standard deviation
@@ -288,8 +244,74 @@ Guidelines:
 - Be balanced: present pros and cons, risks alongside potential returns
 - Acknowledge market uncertainty; past performance does not guarantee future results`;
 
+/**
+ * Builds a context-aware system prompt when the user has an active calculation.
+ *
+ * calculatorContext shape (sent from Angular after a successful calculation):
+ * {
+ *   ticker, name, category,
+ *   principal, years,
+ *   riskFreeRate, beta, expectedReturnRate,
+ *   marketExpectedReturnRate, capmRate, futureValue
+ * }
+ *
+ * When present, Gemini will reference the user's actual numbers instead of
+ * giving generic examples.
+ */
+function buildSystemPrompt(calculatorContext) {
+  if (!calculatorContext || !calculatorContext.ticker) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  const ctx = calculatorContext;
+  const fmt = (n) => Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+  const pct = (n) => `${(Number(n) * 100).toFixed(2)}%`;
+  const gain = ctx.futureValue - ctx.principal;
+  const roi  = (gain / ctx.principal) * 100;
+
+  const contextBlock = `
+
+── ACTIVE CALCULATOR RESULT ──────────────────────────────────────────────────
+The user has just run a CAPM projection in the calculator. Use these exact
+numbers when answering questions — do not substitute generic examples.
+
+  Fund:               ${ctx.name ?? ctx.ticker} (${ctx.ticker})
+  Category:           ${ctx.category ?? 'N/A'}
+  Initial Investment: ${fmt(ctx.principal)}
+  Time Horizon:       ${ctx.years} year${ctx.years === 1 ? '' : 's'}
+
+  CAPM Inputs:
+    Risk-free Rate:   ${pct(ctx.riskFreeRate)}  (US 10-yr Treasury)
+    Beta (β):         ${Number(ctx.beta).toFixed(3)}
+    Fund Return (1Y): ${pct(ctx.expectedReturnRate)}
+    Market Return:    ${pct(ctx.marketExpectedReturnRate)}  (S&P 500 5-yr avg)
+
+  CAPM Rate (r):      ${pct(ctx.capmRate)}
+  Projected Value:    ${fmt(ctx.futureValue)}
+  Total Gain:         ${fmt(gain)}
+  ROI:                ${roi.toFixed(2)}%
+
+When the user asks things like "what does this mean?", "is this a good
+return?", "how does beta affect my result?", "what if I invested more?",
+or "should I switch funds?" — answer using the specific numbers above.
+──────────────────────────────────────────────────────────────────────────────`;
+
+  return BASE_SYSTEM_PROMPT + contextBlock;
+}
+
+// ── POST /api/chat ─────────────────────────────────────────────────────────────
+// Body: {
+//   messages: ChatMessage[],
+//   calculatorContext?: {            ← optional, sent by Angular after calculation
+//     ticker, name, category,
+//     principal, years,
+//     riskFreeRate, beta, expectedReturnRate,
+//     marketExpectedReturnRate, capmRate, futureValue
+//   }
+// }
 app.post('/api/chat', async (req, res) => {
-  const { messages } = req.body;
+  const { messages, calculatorContext } = req.body;
+
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array is required and must not be empty.' });
   }
@@ -307,10 +329,17 @@ app.post('/api/chat', async (req, res) => {
   const lastMessage = safeMessages.pop();
   if (!lastMessage) return res.status(400).json({ error: 'No valid user message found.' });
 
+  // Build context-aware prompt
+  const systemPrompt = buildSystemPrompt(calculatorContext);
+
+  if (calculatorContext?.ticker) {
+    console.log(`  💬 Chat with context: ${calculatorContext.ticker} | ${fmt(calculatorContext.principal)} | ${calculatorContext.years}yr`);
+  }
+
   try {
     const model = genAI.getGenerativeModel({
       model: MODEL,
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
       generationConfig: { maxOutputTokens: MAX_TOKENS, temperature: 0.65 },
     });
     const chat   = model.startChat({ history: safeMessages });
@@ -333,11 +362,15 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// helper used in console.log inside the chat route
+function fmt(n) {
+  return Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+}
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n✅  The server running at http://localhost:${PORT}`);
+  console.log(`\n✅  Server running at http://localhost:${PORT}`);
   console.log(`   Model        : ${MODEL}`);
   console.log(`   Risk-free    : ${(RISK_FREE_RATE * 100).toFixed(2)}%`);
-  console.log(`   Market return: ${(MARKET_EXPECTED_RETURN * 100).toFixed(2)}%`);
-  console.log(`   Open         : http://localhost:${PORT}/index.html\n`);
+  console.log(`   Market return: ${(MARKET_EXPECTED_RETURN * 100).toFixed(2)}%\n`);
 });

@@ -23,7 +23,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { ApiService, Fund, FutureValueResponse } from '../services/api.service';
+import { ApiService, CalculatorContext, Fund, FutureValueResponse } from '../services/api.service';
 
 // Register only the modules we use (keeps bundle lean)
 Chart.register(
@@ -215,6 +215,21 @@ export class CalculatorPageComponent
       this.betaBadge     = this.toSourceBadge(this.result.sources?.beta);
       this.returnBadge   = this.toSourceBadge(this.result.sources?.expectedReturn);
       this.riskFreeBadge = this.toSourceBadge(this.result.sources?.riskFreeRate);
+
+      // Store result in the shared service so chat-page can pass it to Gemini
+      this.apiService.lastCalculatorResult = {
+        ticker:                   this.result.ticker,
+        name:                     this.result.name,
+        category:                 this.result.category,
+        principal:                this.result.principal,
+        years:                    this.result.years,
+        riskFreeRate:             this.result.riskFreeRate,
+        beta:                     this.result.beta,
+        expectedReturnRate:       this.result.expectedReturnRate,
+        marketExpectedReturnRate: this.result.marketExpectedReturnRate,
+        capmRate:                 this.result.capmRate,
+        futureValue:              this.result.futureValue,
+      };
 
       // Schedule chart render — canvas appears after next CD cycle
       this.showChart          = true;
