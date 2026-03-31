@@ -16,6 +16,8 @@
 </div>
 
 <main class="layout">
+
+  <!-- ── Calculator form ── -->
   <section class="panel">
     <h2><span class="icon">🧮</span> Calculator</h2>
     <form class="form" (ngSubmit)="submit()">
@@ -66,6 +68,7 @@
     </form>
   </section>
 
+  <!-- ── Result panel ── -->
   @if (result) {
     <section class="panel" #resultPanel>
       <h2><span class="icon">📊</span> Projection</h2>
@@ -83,7 +86,12 @@
           <div class="metric-right">
             <span class="metric-value">{{ toPercent(result.riskFreeRate) }}</span>
             @if (riskFreeBadge) {
-              <span class="source-badge" [class.live]="riskFreeBadge.kind === 'live'" [class.cached]="riskFreeBadge.kind === 'cached'" [title]="riskFreeBadge.title">{{ riskFreeBadge.label }}</span>
+              <span
+                class="source-badge"
+                [class.live]="riskFreeBadge.kind === 'live'"
+                [class.cached]="riskFreeBadge.kind === 'cached'"
+                [title]="riskFreeBadge.title"
+              >{{ riskFreeBadge.label }}</span>
             }
           </div>
         </div>
@@ -92,7 +100,12 @@
           <div class="metric-right">
             <span class="metric-value">{{ result.beta.toFixed(3) }}</span>
             @if (betaBadge) {
-              <span class="source-badge" [class.live]="betaBadge.kind === 'live'" [class.cached]="betaBadge.kind === 'cached'" [title]="betaBadge.title">{{ betaBadge.label }}</span>
+              <span
+                class="source-badge"
+                [class.live]="betaBadge.kind === 'live'"
+                [class.cached]="betaBadge.kind === 'cached'"
+                [title]="betaBadge.title"
+              >{{ betaBadge.label }}</span>
             }
           </div>
         </div>
@@ -101,7 +114,12 @@
           <div class="metric-right">
             <span class="metric-value gold">{{ toPercent(result.expectedReturnRate) }}</span>
             @if (returnBadge) {
-              <span class="source-badge" [class.live]="returnBadge.kind === 'live'" [class.cached]="returnBadge.kind === 'cached'" [title]="returnBadge.title">{{ returnBadge.label }}</span>
+              <span
+                class="source-badge"
+                [class.live]="returnBadge.kind === 'live'"
+                [class.cached]="returnBadge.kind === 'cached'"
+                [title]="returnBadge.title"
+              >{{ returnBadge.label }}</span>
             }
           </div>
         </div>
@@ -117,12 +135,76 @@
     </section>
   }
 
+  <!-- ── Growth Chart panel ── -->
+  @if (showChart && result) {
+    <section class="panel chart-panel">
+
+      <div class="chart-header">
+        <h2><span class="icon">📈</span> Growth Over Time</h2>
+        <div class="chart-toggles">
+          @for (mode of chartModes; track mode.key) {
+            <button
+              class="chart-toggle"
+              [class.active]="chartMode === mode.key"
+              (click)="setChartMode(mode.key)"
+              type="button"
+            >{{ mode.label }}</button>
+          }
+        </div>
+      </div>
+
+      <!-- Chart canvas — ViewChild binds here -->
+      <div class="chart-wrap">
+        <canvas #chartCanvas></canvas>
+      </div>
+
+      <!-- Summary stats -->
+      <div class="chart-stats">
+        <div class="chart-stat">
+          <div class="chart-stat-label">Total Gain</div>
+          <div class="chart-stat-value green">{{ chartTotalGain }}</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-label">Return on Investment</div>
+          <div class="chart-stat-value gold">{{ chartRoi }}</div>
+        </div>
+        <div class="chart-stat">
+          <div class="chart-stat-label">Doubles In</div>
+          <div class="chart-stat-value blue">{{ chartDoubleYrs }}</div>
+        </div>
+      </div>
+
+      <!-- Milestone markers -->
+      @if (milestones.length > 0) {
+        <div class="milestones">
+          @for (m of milestones; track m.label) {
+            <div class="milestone">
+              <div class="milestone-dot" [style.background]="m.achieved ? '#3b82f6' : '#6b7fa3'"></div>
+              <span>
+                <strong>{{ m.label }}</strong> —
+                @if (m.achieved) {
+                  reached at <strong>Year {{ m.years.toFixed(1) }}</strong> ✅
+                } @else {
+                  needs <strong>{{ m.years.toFixed(1) }} years</strong>
+                  ({{ m.extra.toFixed(1) }} more)
+                }
+              </span>
+            </div>
+          }
+        </div>
+      }
+
+    </section>
+  }
+
+  <!-- ── Error panel ── -->
   @if (errorMessage) {
     <section class="panel error">{{ errorMessage }}</section>
   }
+
 </main>
 
 <p class="disclaimer">
-  Results are estimates based on CAPM assumptions and historical data. Past performance does not guarantee future returns.
-  Consult a licensed financial advisor before investing.
+  Results are estimates based on CAPM assumptions and historical data. Past performance does not
+  guarantee future returns. Consult a licensed financial advisor before investing.
 </p>

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface Fund {
@@ -20,6 +20,8 @@ export interface FutureValueResponse {
   marketExpectedReturnRate: number;
   capmRate: number;
   futureValue: number;
+  principal: number;
+  years: number;
   sources?: {
     beta?: string;
     expectedReturn?: string;
@@ -38,67 +40,79 @@ export interface ChatResponse {
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private readonly calculatorApiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
+  // Calculator + chat endpoints all live on the Node/Express server (port 3000).
+  // Change this one line if you move the backend to a different port.
+  private readonly calculatorApiBase = `${window.location.protocol}//${window.location.hostname}:3000/api`;
 
   constructor(private readonly http: HttpClient) {}
 
+  /** GET /api/funds */
   async getFunds(): Promise<FundsResponse> {
     try {
-      return await firstValueFrom(this.http.get<FundsResponse>(`${this.calculatorApiBase}/funds`));
+      return await firstValueFrom(
+        this.http.get<FundsResponse>(`${this.calculatorApiBase}/funds`)
+      );
     } catch (error: unknown) {
       throw this.toApiError(error, 'Unable to load funds.');
     }
   }
 
-  async getFutureValue(ticker: string, principal: number, years: number): Promise<FutureValueResponse> {
-    const params = new URLSearchParams({
-      ticker,
-      principal: String(principal),
-      years: String(years)
-    });
+  /** GET /api/investment/future-value?ticker=VOO&principal=10000&years=5 */
+  async getFutureValue(
+    ticker: string,
+    principal: number,
+    years: number
+  ): Promise<FutureValueResponse> {
+    const params = new HttpParams()
+      .set('ticker', ticker)
+      .set('principal', String(principal))
+      .set('years', String(years));
+
     try {
       return await firstValueFrom(
-        this.http.get<FutureValueResponse>(`${this.calculatorApiBase}/investment/future-value?${params}`)
+        this.http.get<FutureValueResponse>(
+          `${this.calculatorApiBase}/investment/future-value`,
+          { params }
+        )
       );
     } catch (error: unknown) {
       throw this.toApiError(error, 'Unable to calculate future value.');
     }
   }
 
+  /** POST /api/chat — goes through Angular proxy to avoid CORS */
   sendChat(messages: ChatMessage[]): Promise<ChatResponse> {
-    return firstValueFrom(this.http.post<ChatResponse>('/api/chat', { messages }));
+    return firstValueFrom(
+      this.http.post<ChatResponse>(`${this.calculatorApiBase}/chat`, { messages })
+    );
   }
+
+  // ── Error helpers ───────────────────────────────────────────────────────────
 
   private toApiError(error: unknown, fallback: string): Error {
     if (error instanceof HttpErrorResponse) {
       const serverMessage = this.extractServerMessage(error);
-      if (serverMessage) {
-        return new Error(serverMessage);
-      }
-      if (error.status > 0) {
-        return new Error(`${fallback} (HTTP ${error.status})`);
-      }
+      if (serverMessage) return new Error(serverMessage);
+      if (error.status > 0) return new Error(`${fallback} (HTTP ${error.status})`);
     }
-    if (error instanceof Error && error.message) {
-      return new Error(error.message);
-    }
+    if (error instanceof Error && error.message) return new Error(error.message);
     return new Error(fallback);
   }
 
   private extractServerMessage(error: HttpErrorResponse): string | null {
     const payload = error.error;
-    if (!payload) {
-      return null;
-    }
-    if (typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') {
-      return payload.error;
+    if (!payload) return null;
+    if (
+      typeof payload === 'object' &&
+      'error' in payload &&
+      typeof payload['error'] === 'string'
+    ) {
+      return payload['error'];
     }
     if (typeof payload === 'string') {
       try {
         const parsed = JSON.parse(payload);
-        if (parsed && typeof parsed.error === 'string') {
-          return parsed.error;
-        }
+        if (parsed && typeof parsed.error === 'string') return parsed.error;
       } catch {
         return null;
       }

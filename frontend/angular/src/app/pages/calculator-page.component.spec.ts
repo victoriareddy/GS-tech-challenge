@@ -21,6 +21,8 @@ describe('CalculatorPageComponent', () => {
       expectedReturn: 'Yahoo Finance (live)',
       riskFreeRate: 'FRED (live)',
     },
+    principal: 0,
+    years: 0
   };
 
   const getFunds = vi.fn().mockResolvedValue({
