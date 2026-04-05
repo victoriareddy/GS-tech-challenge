@@ -16,14 +16,14 @@
  *
  * Setup:
  *   1. npm install express cors dotenv @google/generative-ai node-fetch
- *   2. Create .env:  GEMINI_API_KEY=your-key-here
+ *   2. Create ../.env (repo root):  GEMINI_API_KEY=your-key-here
  *   3. node server.js
  */
 
 const express  = require('express');
 const cors     = require('cors');
 const path     = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 let _fetch;
 async function getFetch() {

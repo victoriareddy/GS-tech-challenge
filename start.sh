@@ -4,9 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 ANGULAR_DIR="${ROOT_DIR}/frontend/angular"
+ENV_FILE="${ROOT_DIR}/.env"
 FRONTEND_PORT="${FRONTEND_PORT:-5500}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 FRONTEND_MODE="${FRONTEND_MODE:-auto}" # auto | angular | static
+
+if [[ -f "${ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
