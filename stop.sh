@@ -3,6 +3,7 @@ set -euo pipefail
 
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-5500}"
+CHAT_PORT="${CHAT_PORT:-3000}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -31,5 +32,6 @@ require_command kill
 
 kill_listeners "${BACKEND_PORT}"
 kill_listeners "${FRONTEND_PORT}"
+kill_listeners "${CHAT_PORT}"
 
 echo "Done."
