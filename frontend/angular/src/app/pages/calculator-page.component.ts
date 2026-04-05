@@ -170,7 +170,7 @@ export class CalculatorPageComponent
       } else {
         this.setSubmitState(false, 'Calculate Future Value →');
       }
-      this.showError('Unable to load funds. Make sure the server is running on port 3000.');
+      this.showError('Unable to load funds. Make sure the server is running on port 8080.');
       this.cdr.detectChanges();
     }
   }
@@ -240,10 +240,13 @@ export class CalculatorPageComponent
       this.cdr.detectChanges();
 
       queueMicrotask(() => {
-        this.resultPanel?.nativeElement?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-        });
+        const panel = this.resultPanel?.nativeElement;
+        if (panel && typeof panel.scrollIntoView === 'function') {
+          panel.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+          });
+        }
       });
     } catch (error: unknown) {
       const message =

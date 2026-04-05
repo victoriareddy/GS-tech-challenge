@@ -58,9 +58,8 @@ export interface CalculatorContext {
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  // Calculator + chat endpoints all live on the Node/Express server (port 3000).
-  // Change this one line if you move the backend to a different port.
-  private readonly calculatorApiBase = `${window.location.protocol}//${window.location.hostname}:3000/api`;
+  // Java calculator backend from start.sh runs on port 8080.
+  private readonly calculatorApiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
 
   // Stores the last CAPM result so chat-page can send it as context to Gemini.
   // Set by calculator-page after a successful calculation.
@@ -102,10 +101,10 @@ export class ApiService {
     }
   }
 
-  /** POST /api/chat — goes through Angular proxy to avoid CORS */
+  /** POST /api/chat — proxied by Angular dev server to localhost:3000 */
   sendChat(messages: ChatMessage[], calculatorContext?: CalculatorContext): Promise<ChatResponse> {
     return firstValueFrom(
-      this.http.post<ChatResponse>(`${this.calculatorApiBase}/chat`, {
+      this.http.post<ChatResponse>('/api/chat', {
         messages,
         ...(calculatorContext ? { calculatorContext } : {}),
       })
