@@ -78,13 +78,13 @@
       </div>
       <div class="metrics">
         <div class="metric-row">
-          <span class="metric-label">Ticker</span>
-          <span class="metric-value highlight">{{ result.ticker }}</span>
+          <a class="metric-link" [href]="getTickerInfoUrl()" target="_blank" rel="noopener noreferrer">Ticker</a>
+          <a class="metric-value metric-value-link highlight" [href]="getTickerInfoUrl()" target="_blank" rel="noopener noreferrer">{{ result.ticker }}</a>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Risk-free Rate</span>
+          <a class="metric-link" [href]="getRiskFreeSourceUrl()" target="_blank" rel="noopener noreferrer">Risk-free Rate</a>
           <div class="metric-right">
-            <span class="metric-value">{{ toPercent(result.riskFreeRate) }}</span>
+            <a class="metric-value metric-value-link" [href]="getRiskFreeSourceUrl()" target="_blank" rel="noopener noreferrer">{{ toPercent(result.riskFreeRate) }}</a>
             @if (riskFreeBadge) {
               <span
                 class="source-badge"
@@ -96,9 +96,9 @@
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Beta</span>
+          <a class="metric-link" [href]="getBetaSourceUrl()" target="_blank" rel="noopener noreferrer">Beta</a>
           <div class="metric-right">
-            <span class="metric-value">{{ result.beta.toFixed(3) }}</span>
+            <a class="metric-value metric-value-link" [href]="getBetaSourceUrl()" target="_blank" rel="noopener noreferrer">{{ result.beta.toFixed(3) }}</a>
             @if (betaBadge) {
               <span
                 class="source-badge"
@@ -110,9 +110,9 @@
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Fund Return (1Y avg)</span>
+          <a class="metric-link" [href]="getFundReturnSourceUrl()" target="_blank" rel="noopener noreferrer">Fund Return (1Y avg)</a>
           <div class="metric-right">
-            <span class="metric-value gold">{{ toPercent(result.expectedReturnRate) }}</span>
+            <a class="metric-value metric-value-link gold" [href]="getFundReturnSourceUrl()" target="_blank" rel="noopener noreferrer">{{ toPercent(result.expectedReturnRate) }}</a>
             @if (returnBadge) {
               <span
                 class="source-badge"
@@ -124,12 +124,12 @@
           </div>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Market Return (S&amp;P 5Y)</span>
-          <span class="metric-value">{{ toPercent(result.marketExpectedReturnRate) }}</span>
+          <a class="metric-link" [href]="getMarketReturnSourceUrl()" target="_blank" rel="noopener noreferrer">Market Return (S&amp;P 5Y)</a>
+          <a class="metric-value metric-value-link" [href]="getMarketReturnSourceUrl()" target="_blank" rel="noopener noreferrer">{{ toPercent(result.marketExpectedReturnRate) }}</a>
         </div>
         <div class="metric-row">
-          <span class="metric-label">CAPM Rate</span>
-          <span class="metric-value highlight">{{ toPercent(result.capmRate) }}</span>
+          <a class="metric-link" [href]="getCapmSourceUrl()" target="_blank" rel="noopener noreferrer">CAPM Rate</a>
+          <a class="metric-value metric-value-link highlight" [href]="getCapmSourceUrl()" target="_blank" rel="noopener noreferrer">{{ toPercent(result.capmRate) }}</a>
         </div>
       </div>
     </section>

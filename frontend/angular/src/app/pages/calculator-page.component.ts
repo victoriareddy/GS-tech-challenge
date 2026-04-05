@@ -55,6 +55,10 @@ interface Milestone {
 
 const INFLATION_RATE = 0.030;  // ~3 % avg US inflation
 const SP500_RATE     = 0.1050; // S&P 500 5-year historical avg
+const FRED_DGS10_URL = 'https://fred.stlouisfed.org/series/DGS10';
+const NEWTON_BETA_DOCS_URL = 'https://www.newtonanalytics.com/docs/api/stockbeta.php';
+const YAHOO_SP500_5Y_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1mo&events=history';
+const CAPM_REFERENCE_URL = 'https://www.investopedia.com/terms/c/capm.asp';
 
 @Component({
   selector: 'app-calculator-page',
@@ -291,6 +295,32 @@ export class CalculatorPageComponent
     if (!Number.isFinite(value) || value <= 0) return 'Value out of range';
     if (Math.abs(value) >= 1e15) return `$${value.toExponential(2)}`;
     return this.toMoney(value);
+  }
+
+  getTickerInfoUrl(): string {
+    const ticker = this.result?.ticker || this.selectedTicker || 'VFIAX';
+    return `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
+  }
+
+  getFundReturnSourceUrl(): string {
+    const ticker = this.result?.ticker || this.selectedTicker || 'VFIAX';
+    return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1y&interval=1mo&events=history`;
+  }
+
+  getRiskFreeSourceUrl(): string {
+    return FRED_DGS10_URL;
+  }
+
+  getBetaSourceUrl(): string {
+    return NEWTON_BETA_DOCS_URL;
+  }
+
+  getMarketReturnSourceUrl(): string {
+    return YAHOO_SP500_5Y_URL;
+  }
+
+  getCapmSourceUrl(): string {
+    return CAPM_REFERENCE_URL;
   }
 
   // ── Chart helpers ───────────────────────────────────────────────────────────

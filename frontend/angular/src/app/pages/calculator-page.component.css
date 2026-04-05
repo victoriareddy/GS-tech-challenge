@@ -83,7 +83,18 @@ main.layout { display:flex; flex-direction:column; gap:20px; max-width:700px; ma
 .metrics { display:flex; flex-direction:column; gap:8px; }
 .metric-row { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--surface); border-radius:9px; border:1px solid var(--border); font-size:.85rem; }
 .metric-label { color:var(--muted); font-weight:500; }
+.metric-link {
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.metric-link:hover {
+  color: var(--accent2);
+  text-decoration: underline;
+}
 .metric-value { color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
+.metric-value-link { text-decoration: none; }
+.metric-value-link:hover { text-decoration: underline; }
 .metric-value.highlight { color:var(--accent2); }
 .metric-value.gold { color:var(--gold); }
 .metric-right { display:flex; align-items:center; gap:8px; }
